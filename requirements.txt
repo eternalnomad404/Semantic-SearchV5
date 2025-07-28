@@ -1,5 +1,4 @@
 flask
 faiss-cpu
 pandas
-openai
 sentence-transformers

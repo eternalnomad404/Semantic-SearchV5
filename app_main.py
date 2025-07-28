@@ -73,8 +73,9 @@ def search():
                         "values": entry["values"],
                         "similarity": round(similarity, 3)
                     })
-    
+
     return render_template("search_results.html", results=results, query=request.form.get("query", ""))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)  # Production-compatible
