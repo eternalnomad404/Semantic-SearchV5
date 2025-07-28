@@ -1,0 +1,22 @@
+{
+  "$schema": "https://railway.com/railway.schema.json", // Schema for validation & editor hints
+
+  "build": {
+    "builder": "NIXPACKS" // ✅ Force Railway to use Nixpacks (not Docker)
+  },
+
+  "deploy": {
+    "runtime": "V2", // Use Railway's newer deployment engine
+    "numReplicas": 1, // Run 1 copy of your app (default is 1)
+    "sleepApplication": false, // Don't let Railway put your app to sleep when idle
+
+    "multiRegionConfig": {
+      "europe-west4-drams3a": {
+        "numReplicas": 1 // Run this app in 1 region (you can add more if needed)
+      }
+    },
+
+    "restartPolicyType": "ON_FAILURE", // Restart if app crashes
+    "restartPolicyMaxRetries": 10 // Retry 10 times max
+  }
+}
