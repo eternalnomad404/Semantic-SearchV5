@@ -1,19 +1,56 @@
-from flask import Flask, request, render_template
+import os
+import shutil
 import faiss
 import json
+import pandas as pd
+from flask import Flask, request, render_template
 from sentence_transformers import SentenceTransformer
 
 app = Flask(__name__)
-
-# Make zip function available in Jinja2 templates
 app.jinja_env.globals.update(zip=zip)
 
-# Load model
+# === Auto generate embeddings ===
+
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# Load FAISS index and metadata
-index = faiss.read_index("vectorstore/faiss_index.index")
-with open("vectorstore/metadata.json", "r", encoding="utf-8") as f:
+data_folder = "data"
+vectorstore_folder = "vectorstore"
+
+# Clean up old vectorstore
+if os.path.exists(vectorstore_folder):
+    shutil.rmtree(vectorstore_folder)
+os.makedirs(vectorstore_folder)
+
+index = faiss.IndexFlatL2(384)  # 384-dim for MiniLM
+metadata = []
+
+# Loop through all Excel files
+for file in os.listdir(data_folder):
+    if file.endswith(".xlsx"):
+        filepath = os.path.join(data_folder, file)
+        xls = pd.ExcelFile(filepath)
+        for sheet_name in xls.sheet_names:
+            df = xls.parse(sheet_name).fillna("")
+            for i, row in df.iterrows():
+                row_text = " ".join(str(cell) for cell in row.values)
+                embedding = model.encode([row_text])[0]
+                index.add(embedding.reshape(1, -1))
+                metadata.append({
+                    "sheet": f"{file} - {sheet_name}",
+                    "column_headers": list(df.columns),
+                    "values": list(row.values)
+                })
+
+# Save index and metadata
+faiss.write_index(index, os.path.join(vectorstore_folder, "faiss_index.index"))
+with open(os.path.join(vectorstore_folder, "metadata.json"), "w", encoding="utf-8") as f:
+    json.dump(metadata, f, ensure_ascii=False, indent=2)
+
+# === End embedding generation ===
+
+# Load index and metadata
+index = faiss.read_index(os.path.join(vectorstore_folder, "faiss_index.index"))
+with open(os.path.join(vectorstore_folder, "metadata.json"), "r", encoding="utf-8") as f:
     metadata = json.load(f)
 
 @app.route("/", methods=["GET", "POST"])
@@ -22,46 +59,20 @@ def search():
     if request.method == "POST":
         query = request.form["query"]
         query_vector = model.encode([query])
-        D, I = index.search(query_vector, 20)  # Still search for 20 to get candidates
+        D, I = index.search(query_vector, 20)
         
-        print(f"Query: {query}")
-        print(f"Distances: {D[0][:5]}")  # First 5 distances
-        print(f"Indices: {I[0][:5]}")   # First 5 indices
-        
-        # Set similarity threshold - keeping it reasonable for your data
-        similarity_threshold = 0.35  # Based on your debug output, this should work well
-        
+        similarity_threshold = 0.35
         for distance, idx in zip(D[0], I[0]):
-            # Convert distance to similarity (FAISS returns L2 distance)
-            similarity = 1 / (1 + distance)  # Convert to similarity score
-            
-            print(f"Distance: {distance}, Similarity: {similarity:.3f}, Above threshold: {similarity >= similarity_threshold}")
-            
-            # Only include results above threshold
+            similarity = 1 / (1 + distance)
             if similarity >= similarity_threshold and idx < len(metadata):
                 entry = metadata[idx]
-                
-                # Check if the entry has meaningful data (not empty)
-                has_meaningful_data = False
-                if entry.get("values") and len(entry["values"]) > 0:
-                    # Check if any of the values are not empty/None
-                    for value in entry["values"]:
-                        if value and str(value).strip():  # Not empty, None, or just whitespace
-                            has_meaningful_data = True
-                            break
-                
-                if has_meaningful_data:
-                    print(f"Adding result from sheet: {entry['sheet']} with values: {entry['values'][:3]}")
+                if entry.get("values") and any(str(v).strip() for v in entry["values"]):
                     results.append({
                         "sheet": entry["sheet"],
                         "column_headers": entry["column_headers"],
                         "values": entry["values"],
                         "similarity": round(similarity, 3)
                     })
-                else:
-                    print(f"Skipping empty result from sheet: {entry['sheet']}")
-        
-        print(f"Final results count: {len(results)}")
     
     return render_template("search_results.html", results=results, query=request.form.get("query", ""))
 
