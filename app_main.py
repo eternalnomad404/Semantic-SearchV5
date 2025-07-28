@@ -1,56 +1,28 @@
+# app_main.py
+
 import os
-import shutil
 import faiss
 import json
-import pandas as pd
 from flask import Flask, request, render_template
 from sentence_transformers import SentenceTransformer
 
 app = Flask(__name__)
 app.jinja_env.globals.update(zip=zip)
 
-# === Auto generate embeddings ===
-
+# Load model and precomputed vectorstore
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
-data_folder = "data"
-vectorstore_folder = "vectorstore"
+VECTORSTORE_DIR = "vectorstore"
+INDEX_PATH = os.path.join(VECTORSTORE_DIR, "faiss_index.index")
+METADATA_PATH = os.path.join(VECTORSTORE_DIR, "metadata.json")
 
-# Clean up old vectorstore
-if os.path.exists(vectorstore_folder):
-    shutil.rmtree(vectorstore_folder)
-os.makedirs(vectorstore_folder)
-
-index = faiss.IndexFlatL2(384)  # 384-dim for MiniLM
-metadata = []
-
-# Loop through all Excel files
-for file in os.listdir(data_folder):
-    if file.endswith(".xlsx"):
-        filepath = os.path.join(data_folder, file)
-        xls = pd.ExcelFile(filepath)
-        for sheet_name in xls.sheet_names:
-            df = xls.parse(sheet_name).fillna("")
-            for i, row in df.iterrows():
-                row_text = " ".join(str(cell) for cell in row.values)
-                embedding = model.encode([row_text])[0]
-                index.add(embedding.reshape(1, -1))
-                metadata.append({
-                    "sheet": f"{file} - {sheet_name}",
-                    "column_headers": list(df.columns),
-                    "values": list(row.values)
-                })
-
-# Save index and metadata
-faiss.write_index(index, os.path.join(vectorstore_folder, "faiss_index.index"))
-with open(os.path.join(vectorstore_folder, "metadata.json"), "w", encoding="utf-8") as f:
-    json.dump(metadata, f, ensure_ascii=False, indent=2)
-
-# === End embedding generation ===
+# Ensure files exist
+if not os.path.exists(INDEX_PATH) or not os.path.exists(METADATA_PATH):
+    raise FileNotFoundError("❌ Precomputed FAISS index or metadata not found. Run generate_embeddings.py first.")
 
 # Load index and metadata
-index = faiss.read_index(os.path.join(vectorstore_folder, "faiss_index.index"))
-with open(os.path.join(vectorstore_folder, "metadata.json"), "r", encoding="utf-8") as f:
+index = faiss.read_index(INDEX_PATH)
+with open(METADATA_PATH, "r", encoding="utf-8") as f:
     metadata = json.load(f)
 
 @app.route("/", methods=["GET", "POST"])
@@ -60,7 +32,7 @@ def search():
         query = request.form["query"]
         query_vector = model.encode([query])
         D, I = index.search(query_vector, 20)
-        
+
         similarity_threshold = 0.35
         for distance, idx in zip(D[0], I[0]):
             similarity = 1 / (1 + distance)
