@@ -7,9 +7,15 @@ from sentence_transformers import SentenceTransformer
 import streamlit as st
 import pickle
 import numpy as np
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from Levenshtein import distance as levenshtein_distance
+from fuzzywuzzy import fuzz
 
 class HybridSearcher:
     def __init__(self):
+        # Update paths to be relative
         self.index = faiss.read_index("vectorstore/faiss_index.index")
         with open("vectorstore/metadata.json", "r", encoding="utf-8") as f:
             self.metadata = json.load(f)
@@ -24,36 +30,33 @@ class HybridSearcher:
         query_vector = self.model.encode([query])
         D, I = self.index.search(query_vector, k*2)
         
-        # Get TF-IDF similarity
+        # Get TF-IDF similarity with normalization
         query_tfidf = self.tfidf_vectorizer.transform([query])
         tfidf_scores = (self.tfidf_vectors @ query_tfidf.T).toarray().flatten()
         
-        # Calculate vocabulary overlap
-        query_terms = set(query.lower().split())
+        # Normalize TF-IDF scores to 0-1 range
+        if np.max(tfidf_scores) > 0:
+            tfidf_scores = tfidf_scores / np.max(tfidf_scores)
         
         results = []
         for dist, idx in zip(D[0], I[0]):
             if idx >= len(self.metadata):
                 continue
                 
-            semantic_score = 1 / (1 + dist)
-            tfidf_score = tfidf_scores[idx]
+            semantic_score = 1 / (1 + dist)  # Already normalized
+            tfidf_score = float(tfidf_scores[idx])
             
-            # Check text overlap with more lenient criteria
-            metadata_text = " ".join(str(v) for v in self.metadata[idx]['values']).lower()
-            text_overlap = any(term in metadata_text for term in query_terms)
-            
-            # Calculate combined score
+            # Calculate combined score with normalized values
             combined_score = (0.7 * semantic_score) + (0.3 * tfidf_score)
             
-            # More lenient inclusion criteria
+            # Add result if it meets threshold
             if combined_score >= min_score:
                 metadata = self.metadata[idx]
                 results.append({
                     'metadata': metadata,
                     'score': float(combined_score),
                     'semantic_score': float(semantic_score),
-                    'tfidf_score': float(tfidf_score)
+                    'tfidf_score': float(tfidf_score)  # Now normalized
                 })
         
         # Sort by combined score

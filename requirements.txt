@@ -3,3 +3,9 @@ faiss-cpu
 pandas
 sentence-transformers
 gunicorn
+streamlit
+numpy
+openpyxl
+scikit-learn
+python-Levenshtein
+fuzzywuzzy
