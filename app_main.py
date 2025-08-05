@@ -25,10 +25,10 @@ class HybridSearcher:
             self.tfidf_vectors = tfidf_data['vectors']
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
 
-    def search(self, query, k=5, min_score=0.4):  # Lowered min_score default
+    def search(self, query, k=20, min_score=0.30):  # Updated default values
         # Get semantic search results
         query_vector = self.model.encode([query])
-        D, I = self.index.search(query_vector, k*2)
+        D, I = self.index.search(query_vector, k*2)  # Getting more candidates initially
         
         # Get TF-IDF similarity with normalization
         query_tfidf = self.tfidf_vectorizer.transform([query])
@@ -39,27 +39,35 @@ class HybridSearcher:
             tfidf_scores = tfidf_scores / np.max(tfidf_scores)
         
         results = []
+        seen_content = set()  # Track unique content
+        
         for dist, idx in zip(D[0], I[0]):
             if idx >= len(self.metadata):
                 continue
-                
-            semantic_score = 1 / (1 + dist)  # Already normalized
+            
+            # Create a unique identifier for the content
+            content_key = tuple(str(v) for v in self.metadata[idx]['values'])
+            
+            # Skip if we've seen this content before
+            if content_key in seen_content:
+                continue
+            
+            semantic_score = 1 / (1 + dist)
             tfidf_score = float(tfidf_scores[idx])
             
-            # Calculate combined score with normalized values
             combined_score = (0.7 * semantic_score) + (0.3 * tfidf_score)
             
-            # Add result if it meets threshold
             if combined_score >= min_score:
                 metadata = self.metadata[idx]
                 results.append({
                     'metadata': metadata,
                     'score': float(combined_score),
                     'semantic_score': float(semantic_score),
-                    'tfidf_score': float(tfidf_score)  # Now normalized
+                    'tfidf_score': float(tfidf_score)
                 })
+                seen_content.add(content_key)  # Add to seen content
         
-        # Sort by combined score
+        # Sort by combined score and take top k unique results
         results = sorted(results, key=lambda x: x['score'], reverse=True)
         return results[:k] if results else []
 
@@ -83,13 +91,8 @@ def main():
         st.error("⚠️ Vector store not found. Please run generate_embeddings.py first.")
         return
 
+    # Search interface - removed sliders, using fixed values
     query = st.text_input("Enter your search query:", placeholder="Example: machine learning tools")
-    num_results = st.slider("Number of results:", min_value=1, max_value=20, value=5)  # Changed max_value to 20
-    min_score = st.slider("Minimum relevance score:", 
-                         min_value=0.3, 
-                         max_value=1.0, 
-                         value=0.4, 
-                         step=0.05)
 
     if query:
         if len(query.strip()) < 3:
@@ -97,7 +100,8 @@ def main():
             return
 
         with st.spinner("🔍 Searching..."):
-            results = searcher.search(query, k=num_results, min_score=min_score)
+            # Fixed values: k=20, min_score=0.30
+            results = searcher.search(query, k=20, min_score=0.30)
 
             if results:
                 for i, result in enumerate(results, 1):
@@ -126,7 +130,6 @@ def main():
         This search system combines:
         - Semantic Search (FAISS)
         - TF-IDF Keyword Matching
-        - Text Overlap Verification
         """)
 
 if __name__ == "__main__":

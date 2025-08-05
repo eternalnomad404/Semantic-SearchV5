@@ -35,7 +35,7 @@ sheet_configs = [
     {
         "filename": "service-providers.xlsx",
         "sheet_name": "service-providers",
-        "embed_cols": [1],
+        "embed_cols": [0, 1],
         "display_cols": [0],
         "column_headers": ["Name of Service Provider"],
         "skip_row": 0,
