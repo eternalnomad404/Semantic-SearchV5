@@ -3,57 +3,79 @@
 import os
 import faiss
 import json
-from sentence_transformers import SentenceTransformer
-import streamlit as st
 import numpy as np
+import streamlit as st
+from sentence_transformers import SentenceTransformer
+
 
 class SemanticSearcher:
-    def __init__(self):
-        # Update paths to be relative
-        self.index = faiss.read_index("vectorstore/faiss_index.index")
-        with open("vectorstore/metadata.json", "r", encoding="utf-8") as f:
-            self.metadata = json.load(f)
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+    """
+    A pure semantic searcher using FAISS and a SentenceTransformer model.
+    """
+    def __init__(self, 
+                 index_path: str = "vectorstore/faiss_index.index", 
+                 metadata_path: str = "vectorstore/metadata.json",
+                 model_name: str = "all-MiniLM-L6-v2"):
+        # Load FAISS index
+        if not os.path.exists(index_path):
+            raise FileNotFoundError(f"FAISS index not found at {index_path}")
+        self.index = faiss.read_index(index_path)
 
-    def search(self, query, k=20, min_score=0.30):
-        # Get semantic search results only
+        # Load metadata
+        if not os.path.exists(metadata_path):
+            raise FileNotFoundError(f"Metadata JSON not found at {metadata_path}")
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            self.metadata = json.load(f)
+
+        # Load embedding model
+        self.model = SentenceTransformer(model_name)
+
+    def search(self, query: str, k: int = 20, min_score: float = 0.30) -> list[dict]:
+        """
+        Perform a semantic-only search and return up to `k` results 
+        with score >= `min_score`.
+        """
+        # Encode query and search in FAISS
         query_vector = self.model.encode([query])
-        D, I = self.index.search(query_vector, k*2)  # Getting more candidates initially
-        
-        results = []
-        seen_content = set()  # Track unique content
-        
-        for dist, idx in zip(D[0], I[0]):
-            if idx >= len(self.metadata):
+        distances, indices = self.index.search(query_vector, k * 2)
+
+        results: list[dict] = []
+        seen_keys: set[tuple] = set()
+
+        for dist, idx in zip(distances[0], indices[0]):
+            if idx < 0 or idx >= len(self.metadata):
                 continue
-            
-            # Create a unique identifier for the content
-            content_key = tuple(str(v) for v in self.metadata[idx]['values'])
-            
-            # Skip if we've seen this content before
-            if content_key in seen_content:
+
+            item = self.metadata[idx]
+
+            # Unique key to avoid duplicates
+            key = tuple(str(v) for v in item.get('values', []))
+            if key in seen_keys:
                 continue
-            
-            # Only semantic score - no TF-IDF
-            semantic_score = 1 / (1 + dist)
-            
-            if semantic_score >= min_score:
-                metadata = self.metadata[idx]
-                results.append({
-                    'metadata': metadata,
-                    'score': float(semantic_score)  # Only one score now
-                })
-                seen_content.add(content_key)  # Add to seen content
-        
-        # Sort by semantic score and take top k unique results
-        results = sorted(results, key=lambda x: x['score'], reverse=True)
-        return results[:k] if results else []
+
+            score = 1 / (1 + dist)
+            if score < min_score:
+                continue
+
+            results.append({
+                'metadata': item,
+                'score': float(score)
+            })
+            seen_keys.add(key)
+
+        # Sort by score descending and return top k
+        results.sort(key=lambda x: x['score'], reverse=True)
+        return results[:k]
+
 
 @st.cache_resource
-def initialize_searcher():
+def initialize_searcher() -> SemanticSearcher:
+    """Initialize and cache the SemanticSearcher resource."""
     return SemanticSearcher()
 
-def main():
+
+def main() -> None:
+    """Streamlit app entry point."""
     st.set_page_config(
         page_title="Semantic Search System",
         page_icon="🔎",
@@ -63,42 +85,43 @@ def main():
     st.title("🔎 Semantic Search System")
     st.markdown("### Search across tools, service providers, and training courses")
 
+    # Initialize searcher and handle missing data
     try:
         searcher = initialize_searcher()
-    except FileNotFoundError:
-        st.error("⚠️ Vector store not found. Please run generate_embeddings.py first.")
+    except FileNotFoundError as e:
+        st.error(f"⚠️ {e}")
         return
 
-    # Search interface - removed sliders, using fixed values
+    # Simple search input - no filter
     query = st.text_input("Enter your search query:", placeholder="Example: machine learning tools")
 
     if query:
         if len(query.strip()) < 3:
-            st.warning("Please enter a longer search query")
-            return
+            st.warning("Please enter a longer search query.")
+        else:
+            with st.spinner("🔍 Searching..."):
+                results = searcher.search(query, k=20, min_score=0.30)
 
-        with st.spinner("🔍 Searching..."):
-            # Fixed values: k=20, min_score=0.30
-            results = searcher.search(query, k=20, min_score=0.30)
+                if results:
+                    for i, res in enumerate(results, start=1):
+                        header = ' | '.join(res['metadata'].get('values', []))
+                        with st.expander(f"Result {i}: {header} (Score: {res['score']:.3f})"):
+                            detail_col, score_col = st.columns([2, 1])
+                            with detail_col:
+                                st.markdown("#### Details")
+                                for key, value in zip(
+                                    res['metadata'].get('column_headers', []),
+                                    res['metadata'].get('values', [])
+                                ):
+                                    st.write(f"**{key}:** {value}")
+                                st.write(f"**Source:** {res['metadata'].get('sheet', 'Unknown')}")
 
-            if results:
-                for i, result in enumerate(results, 1):
-                    with st.expander(f"Result {i}: {' | '.join(result['metadata']['values'])} (Score: {result['score']:.3f})"):
-                        col1, col2 = st.columns([2, 1])
-                        
-                        with col1:
-                            st.markdown("#### Details")
-                            for header, value in zip(result['metadata']['column_headers'], 
-                                                   result['metadata']['values']):
-                                st.write(f"**{header}:** {value}")
-                            st.write(f"**Source:** {result['metadata']['sheet']}")
-
-                        with col2:
-                            st.markdown("#### Relevance Score")
-                            st.progress(result['score'])
-                            st.write(f"Semantic Score: {result['score']:.3f}")
-            else:
-                st.info("No relevant results found for your query. Please try different search terms.")
+                            with score_col:
+                                st.markdown("#### Relevance Score")
+                                st.progress(res['score'])
+                                st.write(f"Semantic Score: {res['score']:.3f}")
+                else:
+                    st.info("No relevant results found for your query. Please try different search terms.")
 
     with st.sidebar:
         st.markdown("### About")
@@ -108,5 +131,7 @@ def main():
         - Neural Language Model (all-MiniLM-L6-v2)
         """)
 
+
 if __name__ == "__main__":
     main()
+    
