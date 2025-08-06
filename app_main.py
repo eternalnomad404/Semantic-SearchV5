@@ -5,38 +5,20 @@ import faiss
 import json
 from sentence_transformers import SentenceTransformer
 import streamlit as st
-import pickle
 import numpy as np
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from Levenshtein import distance as levenshtein_distance
-from fuzzywuzzy import fuzz
 
-class HybridSearcher:
+class SemanticSearcher:
     def __init__(self):
         # Update paths to be relative
         self.index = faiss.read_index("vectorstore/faiss_index.index")
         with open("vectorstore/metadata.json", "r", encoding="utf-8") as f:
             self.metadata = json.load(f)
-        with open("vectorstore/tfidf.pkl", "rb") as f:
-            tfidf_data = pickle.load(f)
-            self.tfidf_vectorizer = tfidf_data['vectorizer']
-            self.tfidf_vectors = tfidf_data['vectors']
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
 
-    def search(self, query, k=20, min_score=0.30):  # Updated default values
-        # Get semantic search results
+    def search(self, query, k=20, min_score=0.30):
+        # Get semantic search results only
         query_vector = self.model.encode([query])
         D, I = self.index.search(query_vector, k*2)  # Getting more candidates initially
-        
-        # Get TF-IDF similarity with normalization
-        query_tfidf = self.tfidf_vectorizer.transform([query])
-        tfidf_scores = (self.tfidf_vectors @ query_tfidf.T).toarray().flatten()
-        
-        # Normalize TF-IDF scores to 0-1 range
-        if np.max(tfidf_scores) > 0:
-            tfidf_scores = tfidf_scores / np.max(tfidf_scores)
         
         results = []
         seen_content = set()  # Track unique content
@@ -52,37 +34,33 @@ class HybridSearcher:
             if content_key in seen_content:
                 continue
             
+            # Only semantic score - no TF-IDF
             semantic_score = 1 / (1 + dist)
-            tfidf_score = float(tfidf_scores[idx])
             
-            combined_score = (0.7 * semantic_score) + (0.3 * tfidf_score)
-            
-            if combined_score >= min_score:
+            if semantic_score >= min_score:
                 metadata = self.metadata[idx]
                 results.append({
                     'metadata': metadata,
-                    'score': float(combined_score),
-                    'semantic_score': float(semantic_score),
-                    'tfidf_score': float(tfidf_score)
+                    'score': float(semantic_score)  # Only one score now
                 })
                 seen_content.add(content_key)  # Add to seen content
         
-        # Sort by combined score and take top k unique results
+        # Sort by semantic score and take top k unique results
         results = sorted(results, key=lambda x: x['score'], reverse=True)
         return results[:k] if results else []
 
 @st.cache_resource
 def initialize_searcher():
-    return HybridSearcher()
+    return SemanticSearcher()
 
 def main():
     st.set_page_config(
-        page_title="Hybrid Search System",
+        page_title="Semantic Search System",
         page_icon="🔎",
         layout="wide"
     )
 
-    st.title("🔎 Hybrid Search System")
+    st.title("🔎 Semantic Search System")
     st.markdown("### Search across tools, service providers, and training courses")
 
     try:
@@ -116,33 +94,19 @@ def main():
                             st.write(f"**Source:** {result['metadata']['sheet']}")
 
                         with col2:
-                            st.markdown("#### Relevance Scores")
+                            st.markdown("#### Relevance Score")
                             st.progress(result['score'])
-                            st.write(f"Total Score: {result['score']:.3f}")
-                            st.write(f"Semantic Score: {result['semantic_score']:.3f}")
-                            st.write(f"TF-IDF Score: {result['tfidf_score']:.3f}")
+                            st.write(f"Semantic Score: {result['score']:.3f}")
             else:
                 st.info("No relevant results found for your query. Please try different search terms.")
 
     with st.sidebar:
         st.markdown("### About")
         st.write("""
-        This search system combines:
-        - Semantic Search (FAISS)
-        - TF-IDF Keyword Matching
+        This search system uses:
+        - Pure Semantic Search (FAISS)
+        - Neural Language Model (all-MiniLM-L6-v2)
         """)
 
 if __name__ == "__main__":
     main()
-
-# Example search queries and results (to be removed in production)
-
-# 🔎 Searching for: 'machine learning'
-# Rank 1 (Score: 0.842):
-# Sheet: training-courses
-# Skill: Machine Learning
-# Topic: Deep Learning
-# ...
-
-# 🔎 Searching for: 'project management'
-# ...
