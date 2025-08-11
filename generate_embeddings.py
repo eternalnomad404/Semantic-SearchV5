@@ -25,29 +25,29 @@ if os.path.exists("vectorstore/tfidf.pkl"):
 sheet_configs = [
     {
         "filename": "tools.xlsx",
-        "sheet_name": "tools",
+        "sheet_name": "Cleaned Sheet",  # Changed from "tools" to actual sheet name
         "embed_cols": [0, 1, 2, 4],
         "display_cols": [0, 1, 2],
         "column_headers": ["Category", "Sub-Category", "Name of Tool"],
-        "skip_row": 0,
+        "skip_rows": 0,  # No need to skip rows in cleaned sheet
         "max_rows": 231
     },
     {
         "filename": "service-providers.xlsx",
-        "sheet_name": "service-providers",
+        "sheet_name": "Service Provider Profiles",
         "embed_cols": [0, 1],
         "display_cols": [0],
         "column_headers": ["Name of Service Provider"],
-        "skip_row": 0,
+        "skip_rows": 0,
         "max_rows": 25
     },
     {
         "filename": "training-courses.xlsx",
-        "sheet_name": "training-courses",
+        "sheet_name": "Training Program",
         "embed_cols": [8, 10, 2, 1, 0],
         "display_cols": [0, 1, 2],
         "column_headers": ["Skill", "Topic", "Course Title"],
-        "skip_row": 0,
+        "skip_rows": 0,
         "max_rows": 110
     }
 ]
@@ -69,15 +69,19 @@ for config in sheet_configs:
         continue
 
     try:
-        # Read Excel with row limit
-        df = pd.read_excel(filepath, header=0, nrows=config["max_rows"])
-        print(f"📊 Loaded {len(df)} rows from {config['filename']} (max: {config['max_rows']})")
+        # Read Excel with proper sheet and skip_rows handling
+        if "skip_rows" in config and config["skip_rows"] > 0:
+            # Skip metadata rows if needed
+            df = pd.read_excel(filepath, sheet_name=config["sheet_name"], header=0, skiprows=config["skip_rows"], nrows=config["max_rows"])
+        else:
+            # Normal reading (for cleaned sheets with proper headers)
+            df = pd.read_excel(filepath, sheet_name=config["sheet_name"], header=0, nrows=config["max_rows"])
+        print(f"📊 Loaded {len(df)} rows from {config['filename']} sheet '{config['sheet_name']}' (max: {config['max_rows']})")
     except Exception as e:
         print(f"❌ Error reading {filepath}: {e}")
         continue
 
-    if config["skip_row"] is not None:
-        df = df.drop(index=config["skip_row"], errors="ignore").reset_index(drop=True)
+    # Remove the old skip_row logic since we now use skiprows in read_excel
 
     try:
         embed_df = df.iloc[:, config["embed_cols"]]
