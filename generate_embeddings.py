@@ -49,6 +49,13 @@ sheet_configs = [
         "column_headers": ["Skill", "Topic", "Course Title"],
         "skip_rows": 0,
         "max_rows": 110
+    },
+    {
+        "type": "case_studies",
+        "filename": "case_studies_metadata.json",
+        "embed_fields": ["title", "industry", "problem_type", "summary", "full_text"],
+        "display_fields": ["title", "industry", "problem_type"],
+        "column_headers": ["Title", "Industry", "Problem Type"]
     }
 ]
 
@@ -62,50 +69,105 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # Process each sheet
 for config in sheet_configs:
-    filepath = os.path.join("data", config["filename"])
+    # Handle case studies differently
+    if config.get("type") == "case_studies":
+        filepath = os.path.join("data", config["filename"])
+        
+        if not os.path.exists(filepath):
+            print(f"❌ Case studies file not found: {filepath}")
+            continue
+            
+        try:
+            # Load case studies metadata
+            with open(filepath, 'r', encoding='utf-8') as f:
+                case_studies = json.load(f)
+            
+            print(f"📊 Loaded {len(case_studies)} case studies from {config['filename']}")
+            
+            for cs in case_studies:
+                # Create embedding text from multiple fields
+                embed_text_parts = []
+                for field in config["embed_fields"]:
+                    if field in cs and cs[field]:
+                        # Limit full_text to avoid too long embeddings
+                        if field == "full_text":
+                            text = cs[field][:2000]  # Limit to 2000 chars for manageable embeddings
+                        else:
+                            text = str(cs[field])
+                        embed_text_parts.append(text)
+                
+                embed_text = " ".join(embed_text_parts)
+                
+                # Create display data
+                display_data = []
+                for field in config["display_fields"]:
+                    display_data.append(cs.get(field, ""))
+                
+                # Store metadata
+                metadata_entry = {
+                    "sheet": "case-studies",
+                    "column_headers": config["column_headers"],
+                    "values": display_data,
+                    "case_study_id": cs.get("id"),
+                    "summary": cs.get("summary", ""),
+                    "full_text": cs.get("full_text", "")[:500] + "..." if len(cs.get("full_text", "")) > 500 else cs.get("full_text", ""),
+                    "word_count": cs.get("word_count", 0),
+                    "industry": cs.get("industry", ""),
+                    "problem_type": cs.get("problem_type", "")
+                }
+                all_metadata.append(metadata_entry)
+                all_texts.append(embed_text)
+                raw_texts.append(embed_text)
+            
+        except Exception as e:
+            print(f"❌ Error processing case studies: {e}")
+            continue
+    else:
+        # Original Excel processing logic
+        filepath = os.path.join("data", config["filename"])
 
-    if not os.path.exists(filepath):
-        print(f"❌ File not found: {filepath}")
-        continue
+        if not os.path.exists(filepath):
+            print(f"❌ File not found: {filepath}")
+            continue
 
-    try:
-        # Read Excel with proper sheet and skip_rows handling
-        if "skip_rows" in config and config["skip_rows"] > 0:
-            # Skip metadata rows if needed
-            df = pd.read_excel(filepath, sheet_name=config["sheet_name"], header=0, skiprows=config["skip_rows"], nrows=config["max_rows"])
-        else:
-            # Normal reading (for cleaned sheets with proper headers)
-            df = pd.read_excel(filepath, sheet_name=config["sheet_name"], header=0, nrows=config["max_rows"])
-        print(f"📊 Loaded {len(df)} rows from {config['filename']} sheet '{config['sheet_name']}' (max: {config['max_rows']})")
-    except Exception as e:
-        print(f"❌ Error reading {filepath}: {e}")
-        continue
+        try:
+            # Read Excel with proper sheet and skip_rows handling
+            if "skip_rows" in config and config["skip_rows"] > 0:
+                # Skip metadata rows if needed
+                df = pd.read_excel(filepath, sheet_name=config["sheet_name"], header=0, skiprows=config["skip_rows"], nrows=config["max_rows"])
+            else:
+                # Normal reading (for cleaned sheets with proper headers)
+                df = pd.read_excel(filepath, sheet_name=config["sheet_name"], header=0, nrows=config["max_rows"])
+            print(f"📊 Loaded {len(df)} rows from {config['filename']} sheet '{config['sheet_name']}' (max: {config['max_rows']})")
+        except Exception as e:
+            print(f"❌ Error reading {filepath}: {e}")
+            continue
 
-    # Remove the old skip_row logic since we now use skiprows in read_excel
+        # Remove the old skip_row logic since we now use skiprows in read_excel
 
-    try:
-        embed_df = df.iloc[:, config["embed_cols"]]
-        display_df = df.iloc[:, config["display_cols"]]
-    except IndexError:
-        print(f"❌ Column indices out of range in {config['filename']}")
-        continue
+        try:
+            embed_df = df.iloc[:, config["embed_cols"]]
+            display_df = df.iloc[:, config["display_cols"]]
+        except IndexError:
+            print(f"❌ Column indices out of range in {config['filename']}")
+            continue
 
-    # Convert to clean strings and join for embedding
-    texts = embed_df.fillna("").astype(str).agg(" ".join, axis=1).tolist()
-    display_data = display_df.fillna("").astype(str).values.tolist()
-    
-    # Store raw texts for TF-IDF
-    raw_texts.extend(texts)
+        # Convert to clean strings and join for embedding
+        texts = embed_df.fillna("").astype(str).agg(" ".join, axis=1).tolist()
+        display_data = display_df.fillna("").astype(str).values.tolist()
+        
+        # Store raw texts for TF-IDF
+        raw_texts.extend(texts)
 
-    for row_data in display_data:
-        metadata_entry = {
-            "sheet": config["sheet_name"],
-            "column_headers": config["column_headers"],
-            "values": row_data
-        }
-        all_metadata.append(metadata_entry)
+        for row_data in display_data:
+            metadata_entry = {
+                "sheet": config["sheet_name"],
+                "column_headers": config["column_headers"],
+                "values": row_data
+            }
+            all_metadata.append(metadata_entry)
 
-    all_texts.extend(texts)
+        all_texts.extend(texts)
 
 # Generate and save embeddings
 print(f"🧠 Generating embeddings for {len(all_texts)} rows...")

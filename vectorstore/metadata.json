@@ -4608,5 +4608,214 @@
       "Social Entrepreneurship and Innovation",
       "Social Entrepreneurship and Systems Change"
     ]
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- Learning Link Foundation (Keyword: Operational Excellence)",
+      "Education",
+      "Digital Transformation"
+    ],
+    "case_study_id": 1,
+    "summary": "",
+    "full_text": "- Learning Link Foundation (Keyword: Operational Excellence)\nThumbnail Header: Tech Integration Scales Field Operations\nHeader- Strategic Platform Adoption Enables LLF to Centralize Over 160 Projects and Drive Unprecedented Operational Scale Across India\nQuick Facts\nSummary\nImpact Numbers\n90% Data Accuracy\n50% Faster Processes\n160+ Projects Centralized\nAbout the Organisation\nLearning Links Foundation (LLF) is a non-profit organization working to strengthen both formal and non-formal education in...",
+    "word_count": 1288,
+    "industry": "Education",
+    "problem_type": "Digital Transformation"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- Farmers for Forest (Keyword: Impact Measurement)",
+      "Technology",
+      "Operational Excellence"
+    ],
+    "case_study_id": 2,
+    "summary": "- Farmers for Forest (Keyword: Impact Measurement)\nThumbnail Header: Smart Stack Enables Agroforestry Scale\nHeader - F4F's Hybrid Tech Stack Revolutionizes Agroforestry Monitoring and Programmatic Scale\nQuick Facts\nSummary\nImpact Highlights\n90%+ Data Accuracy.",
+    "full_text": "- Farmers for Forest (Keyword: Impact Measurement)\nThumbnail Header: Smart Stack Enables Agroforestry Scale\nHeader - F4F's Hybrid Tech Stack Revolutionizes Agroforestry Monitoring and Programmatic Scale\nQuick Facts\nSummary\nImpact Highlights\n90%+ Data Accuracy.\n10X Faster Monitoring\n5-State Expansion\nAbout Farmers for Forests\nFounded in December 2019, Farmers for Forests (F4F) is a pioneering organization dedicated to fostering climate resilience and sustainable livelihoods through tech-enabled a...",
+    "word_count": 1014,
+    "industry": "Technology",
+    "problem_type": "Operational Excellence"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- I-Saksham (Keyword: Leadership Development)",
+      "Education",
+      "Operational Excellence"
+    ],
+    "case_study_id": 3,
+    "summary": "",
+    "full_text": "- I-Saksham (Keyword: Leadership Development)\nThumbnail Header: Scaling Grassroot Leadership with Purpose Built AI\nHeader - Scaling Grassroot Leadership with Purpose Built AI\nQuick facts\nSummary\nImpact Numbers\n50% increase in mentoring coverage\n17% reduction in per-fellow mentoring cost\n30% boost in buddy efficiency\nAbout the Organisation\nI-Saksham is a grassroots nonprofit working to empower young women from marginalized communities as edu-leaders, equipping them to deliver quality education an...",
+    "word_count": 639,
+    "industry": "Education",
+    "problem_type": "Operational Excellence"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- Vipla Foundation (Keyword: Early Childhood Edtech)",
+      "Education",
+      "Impact Measurement"
+    ],
+    "case_study_id": 4,
+    "summary": "",
+    "full_text": "- Vipla Foundation (Keyword: Early Childhood Edtech)\nThumbnail Header: Digital Enablement for Early Childhood Education\nHeader: Reimagining Balwadi Program - Digital Enablement for Early Childhood Education\nQuick Facts\nQ\nSummary\nImpact Numbers\n91% Teachers used app regularly\n31% increase in Student attendance\n10% increase in Continuous Learning Evaluation scores\nAbout the Organisation\nVipla Foundation, formerly Save The Children India, has worked for over three decades to support inclusive devel...",
+    "word_count": 650,
+    "industry": "Education",
+    "problem_type": "Impact Measurement"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- Akshay Patra (Keyword:Supply Chain Optimization)",
+      "Education",
+      "Operational Excellence"
+    ],
+    "case_study_id": 5,
+    "summary": "- Akshay Patra (Keyword:Supply Chain Optimization)\nThumbnail Header: Optimizing Operations to Feed Millions\nQuick Facts\nSummary\nImpact numbers\n2.",
+    "full_text": "- Akshay Patra (Keyword:Supply Chain Optimization)\nThumbnail Header: Optimizing Operations to Feed Millions\nQuick Facts\nSummary\nImpact numbers\n2.35M Meals Daily\n4 Billion+ Meals Served\n19 Geographies Optimized, Cost\nAbout The Akshaya Patra Foundation\nA not-for-profit organization headquartered in Bengaluru, India. It strives to eliminate classroom hunger by implementing the Mid-Day Meal Scheme in government schools and government-aided schools, aiming to counter malnutrition and support the righ...",
+    "word_count": 1274,
+    "industry": "Education",
+    "problem_type": "Operational Excellence"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- Anudip (Keyword:Digital Skilling & Employability)",
+      "Education",
+      "Operational Excellence"
+    ],
+    "case_study_id": 6,
+    "summary": "",
+    "full_text": "- Anudip (Keyword:Digital Skilling & Employability)\nThumbnail Header: Skilling with Smart Systems\nHeader: Scaling Inclusive Digital Livelihoods Through Technology & AI\nQuick Facts\nSummary\nImpact numbers\n70%+ Placement Rate\n20x Faster Job Matching\n90+ Centers Digitized\nAbout The Anudip\nAnudip creates digital livelihoods for underserved communities through technology and by combining 21st century skills with Artificial Intelligence (AI) applications. Since their inception in 2007, Anudip has impac...",
+    "word_count": 1557,
+    "industry": "Education",
+    "problem_type": "Operational Excellence"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- Lend a Hand India (Keyword:Vocational Education Digitization)",
+      "Technology",
+      "Digital Transformation"
+    ],
+    "case_study_id": 7,
+    "summary": "",
+    "full_text": "- Lend a Hand India (Keyword:Vocational Education Digitization)\nThumbnail Header: Scaling Vocational Education\nHeaders: Scaling Vocational Education: Lend a Hand's Digital Transformation\nQuick Facts\nSummary\nImpact numbers\n25+ State Reach\n99%+ Faster Deployments\nDays-to-Minutes Analytics\nAbout Lend A Hand India (LAHI)\nA not-for-profit organization headquartered in Pune, India works at the intersection of education and livelihood to provide youth employment and entrepreneurial opportunities. Lend ...",
+    "word_count": 937,
+    "industry": "Technology",
+    "problem_type": "Digital Transformation"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "- FMCH (Keyword:Public Health Program Delivery)",
+      "Healthcare",
+      "Operational Excellence"
+    ],
+    "case_study_id": 8,
+    "summary": "- FMCH (Keyword:Public Health Program Delivery)\nThumbnail Header: Digitizing Nutrition for Scalable Impact\nFMCH: Digitizing Nutrition for Scaling Impact\nQuick Facts\nSummary\nImpact numbers\n3x increase in families reached. \n77% of SAM/MAM children moved to the healthy category.",
+    "full_text": "- FMCH (Keyword:Public Health Program Delivery)\nThumbnail Header: Digitizing Nutrition for Scalable Impact\nFMCH: Digitizing Nutrition for Scaling Impact\nQuick Facts\nSummary\nImpact numbers\n3x increase in families reached.\n77% of SAM/MAM children moved to the healthy category.\n21% drop in missed high-risk visits\nProblem Statement\nFMCH faced challenges in scaling its nutrition programs while maintaining quality due to inconsistent counseling, ineffective scheduling, and fragmented data. Field offic...",
+    "word_count": 1118,
+    "industry": "Healthcare",
+    "problem_type": "Operational Excellence"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "Educate Girls (Keyword: Precision Targeting)",
+      "Education",
+      "Operational Excellence"
+    ],
+    "case_study_id": 9,
+    "summary": ": Educate Girls (Keyword: Precision Targeting)\nThumbnail Header: Predictive Targeting to Enroll Girls\nHeaders: Predictive tech to identify and target high-need geographies for out-of-school girl enrolment\nQuick Facts\nSummary\nImpact numbers\n1.",
+    "full_text": ": Educate Girls (Keyword: Precision Targeting)\nThumbnail Header: Predictive Targeting to Enroll Girls\nHeaders: Predictive tech to identify and target high-need geographies for out-of-school girl enrolment\nQuick Facts\nSummary\nImpact numbers\n1.56 million girls enrolled in just 6 years\n7x faster impact compared to the previous model\n90% model accuracy with major cost and time savings\nAbout Educate Girls\nEducate Girls is a non-profit working in India’s rural and educationally backward districts to i...",
+    "word_count": 726,
+    "industry": "Education",
+    "problem_type": "Operational Excellence"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "Educate Girls (Keyword: Operational Excellence)",
+      "Technology",
+      "Operational Excellence"
+    ],
+    "case_study_id": 10,
+    "summary": ": Educate Girls (Keyword: Operational Excellence)\nThumbnail Header: GIS-Powered Planning for Field Efficiency\nHeader: GIS for Targeted Expansion: Spatial intelligence to identify underserved geographies and optimize resource deployment\nQuick Facts\nSummary\nImpact numbers\n1.",
+    "full_text": ": Educate Girls (Keyword: Operational Excellence)\nThumbnail Header: GIS-Powered Planning for Field Efficiency\nHeader: GIS for Targeted Expansion: Spatial intelligence to identify underserved geographies and optimize resource deployment\nQuick Facts\nSummary\nImpact numbers\n1.56 million girls enrolled in just 6 years\n7x faster impact compared to the previous model\n90% model accuracy with major cost and time savings\nAbout Educate Girls\nEducate Girls is a non-profit working in India’s rural and educat...",
+    "word_count": 925,
+    "industry": "Technology",
+    "problem_type": "Operational Excellence"
+  },
+  {
+    "sheet": "case-studies",
+    "column_headers": [
+      "Title",
+      "Industry",
+      "Problem Type"
+    ],
+    "values": [
+      "ARMMAN",
+      "Technology",
+      "Operational Excellence"
+    ],
+    "case_study_id": 11,
+    "summary": "",
+    "full_text": ": ARMMAN\nThumbnail Header: Transforming Last-Mile Health Digitally\nAdvancing Reduction in Mortality and Morbidity of Mothers,  Children and Neonates\nKeyword :Public Health Program Delivery\nQuick Facts\nSummary\nImpact numbers\n0 maternal deaths among identified high-risk pregnancies (2023–24) due to digital escalation.\n90% follow-up for high-risk pregnancies identified by the app.\n100% digital field data collection achieved by 2021.\nAbout ARMMAN\nARMMAN is a non-profit organization  leveraging techn...",
+    "word_count": 672,
+    "industry": "Technology",
+    "problem_type": "Operational Excellence"
   }
 ]
