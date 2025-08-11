@@ -5,24 +5,38 @@ import faiss
 import json
 import numpy as np
 import streamlit as st
+import pickle
 from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 class SemanticSearcher:
     """
-    Semantic searcher with strict semantic category filtering.
+    Hybrid searcher combining semantic search with TF-IDF keyword matching.
+    Final score = 0.7 * semantic_score + 0.3 * tfidf_score
     """
     def __init__(self, 
                  index_path: str = "vectorstore/faiss_index.index", 
                  metadata_path: str = "vectorstore/metadata.json",
+                 tfidf_path: str = "vectorstore/tfidf.pkl",
                  model_name: str = "all-MiniLM-L6-v2"):
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"FAISS index not found at {index_path}")
         self.index = faiss.read_index(index_path)
+        
         if not os.path.exists(metadata_path):
             raise FileNotFoundError(f"Metadata JSON not found at {metadata_path}")
         with open(metadata_path, "r", encoding="utf-8") as f:
             self.metadata = json.load(f)
+            
+        if not os.path.exists(tfidf_path):
+            raise FileNotFoundError(f"TF-IDF data not found at {tfidf_path}")
+        with open(tfidf_path, "rb") as f:
+            tfidf_data = pickle.load(f)
+            self.tfidf_vectorizer = tfidf_data['vectorizer']
+            self.tfidf_vectors = tfidf_data['vectors']
+            
         self.model = SentenceTransformer(model_name)
         self.category_patterns = {
             'tools': [
@@ -87,9 +101,16 @@ class SemanticSearcher:
 
     def search(self, query: str, k: int = 20, min_score: float = 0.30) -> tuple[list[dict], str]:
         detected_category = self.detect_query_intent(query)
+        
+        # Semantic search component
         query_vector = self.model.encode([query])
         search_multiplier = 3 if detected_category != 'all' else 2
         distances, indices = self.index.search(query_vector, k * search_multiplier)
+        
+        # TF-IDF search component
+        query_tfidf = self.tfidf_vectorizer.transform([query])
+        tfidf_similarities = cosine_similarity(query_tfidf, self.tfidf_vectors).flatten()
+        
         results: list[dict] = []
         seen_keys: set[tuple] = set()
         tool_names_seen: dict[str, dict] = {}  # Track tool names with their highest scores
@@ -101,13 +122,24 @@ class SemanticSearcher:
             key = tuple(str(v) for v in item.get('values', []))
             if key in seen_keys:
                 continue
-            score = 1 / (1 + dist)
-            if score < min_score:
+                
+            # Calculate semantic score (0-1 range)
+            semantic_score = 1 / (1 + dist)
+            
+            # Get TF-IDF score for this document (0-1 range)
+            tfidf_score = float(tfidf_similarities[idx]) if idx < len(tfidf_similarities) else 0.0
+            
+            # Calculate hybrid score: 70% semantic + 30% TF-IDF
+            hybrid_score = 0.7 * semantic_score + 0.3 * tfidf_score
+            
+            if hybrid_score < min_score:
                 continue
             
             result_entry = {
                 'metadata': item,
-                'score': float(score)
+                'score': float(hybrid_score),
+                'semantic_score': float(semantic_score),
+                'tfidf_score': float(tfidf_score)
             }
             
             # Check if this is from tools sheet and handle deduplication by tool name
@@ -120,7 +152,7 @@ class SemanticSearcher:
                 
                 if tool_name in tool_names_seen:
                     # We've seen this tool name before, keep only the higher scoring one
-                    if score > tool_names_seen[tool_name]['score']:
+                    if hybrid_score > tool_names_seen[tool_name]['score']:
                         # Remove the previous lower-scoring entry
                         results = [r for r in results if not (
                             r['metadata'].get('sheet', '').lower() == 'cleaned sheet' and
@@ -155,13 +187,14 @@ def initialize_searcher() -> SemanticSearcher:
 def main() -> None:
     """Streamlit app entry point."""
     st.set_page_config(
-        page_title="Semantic Search System",
+        page_title="Hybrid Search System",
         page_icon="🔎",
         layout="wide"
     )
 
-    st.title("🔎 Semantic Search System")
+    st.title("🔎 Hybrid Search System")
     st.markdown("### Search across tools, service providers, and training courses")
+    st.markdown("*🤖 Powered by **Semantic Search (70%) + TF-IDF Keyword Matching (30%)**  for the best results*")
 
     # Initialize searcher and handle missing data
     try:
@@ -190,7 +223,7 @@ def main() -> None:
                         header = ' | '.join(res['metadata'].get('values', []))
                         source_sheet = res['metadata'].get('sheet', 'Unknown')
                         source_emoji = "🛠️" if "tools" in source_sheet.lower() else "📚" if "training" in source_sheet.lower() else "🏢"
-                        with st.expander(f"{source_emoji} Result {i}: {header} (Score: {res['score']:.3f})"):
+                        with st.expander(f"{source_emoji} Result {i}: {header} (Hybrid Score: {res['score']:.3f})"):
                             detail_col, score_col = st.columns([2, 1])
                             with detail_col:
                                 st.markdown("#### Details")
@@ -201,16 +234,29 @@ def main() -> None:
                                     st.write(f"**{key}:** {value}")
                                 st.write(f"**Source:** {source_emoji} {source_sheet}")
                             with score_col:
-                                st.markdown("#### Relevance Score")
+                                st.markdown("#### Relevance Scores")
                                 st.progress(res['score'])
-                                st.write(f"Semantic Score: {res['score']:.3f}")
+                                st.write(f"**Hybrid Score:** {res['score']:.3f}")
+                                st.write(f"🧠 Semantic: {res['semantic_score']:.3f} (70%)")
+                                st.write(f"🔍 TF-IDF: {res['tfidf_score']:.3f} (30%)")
                 else:
                     st.info(f"No {detected_display.lower()} found for your query. Try different search terms or be more specific.")
 
     with st.sidebar:
         st.markdown("### About")
         st.write("""
-        AI-powered search for tools, courses, and providers. Results are filtered by your intent when clear, or show all when ambiguous. No manual selection needed.
+        🤖 **Hybrid AI Search** combining:
+        - **70% Semantic Search**: Understanding context and meaning
+        - **30% TF-IDF Keyword**: Exact keyword matching
+        
+        Results are filtered by your intent when clear, or show all when ambiguous. No manual selection needed.
+        """)
+        
+        st.markdown("### Search Tips")
+        st.write("""
+        - **Specific terms**: Use exact keywords for better TF-IDF matching
+        - **Concepts**: Use descriptive phrases for better semantic matching
+        - **Best results**: Combine both approaches in your query
         """)
 
 
