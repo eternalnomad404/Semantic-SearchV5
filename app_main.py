@@ -57,7 +57,7 @@ class SemanticSearcher:
             return 'all'
         best_category = max(category_scores, key=category_scores.get)
         best_score = category_scores[best_category]
-        if best_score > 0.4:
+        if best_score > 0.6:
             return best_category
         else:
             return 'all'
@@ -92,6 +92,8 @@ class SemanticSearcher:
         distances, indices = self.index.search(query_vector, k * search_multiplier)
         results: list[dict] = []
         seen_keys: set[tuple] = set()
+        tool_names_seen: dict[str, dict] = {}  # Track tool names with their highest scores
+        
         for dist, idx in zip(distances[0], indices[0]):
             if idx < 0 or idx >= len(self.metadata):
                 continue
@@ -102,11 +104,43 @@ class SemanticSearcher:
             score = 1 / (1 + dist)
             if score < min_score:
                 continue
-            results.append({
+            
+            result_entry = {
                 'metadata': item,
                 'score': float(score)
-            })
+            }
+            
+            # Check if this is from tools sheet and handle deduplication by tool name
+            sheet_name = item.get('sheet', '').lower()
+            values = item.get('values', [])
+            
+            if 'cleaned sheet' in sheet_name and len(values) >= 3:
+                # This is from tools sheet, check for duplicate tool names
+                tool_name = str(values[2]).strip().lower()  # Name of Tool is in index 2
+                
+                if tool_name in tool_names_seen:
+                    # We've seen this tool name before, keep only the higher scoring one
+                    if score > tool_names_seen[tool_name]['score']:
+                        # Remove the previous lower-scoring entry
+                        results = [r for r in results if not (
+                            r['metadata'].get('sheet', '').lower() == 'cleaned sheet' and
+                            len(r['metadata'].get('values', [])) >= 3 and
+                            str(r['metadata']['values'][2]).strip().lower() == tool_name
+                        )]
+                        # Add the new higher-scoring entry
+                        results.append(result_entry)
+                        tool_names_seen[tool_name] = result_entry
+                    # If current score is lower, don't add it
+                else:
+                    # First time seeing this tool name
+                    results.append(result_entry)
+                    tool_names_seen[tool_name] = result_entry
+            else:
+                # Not from tools sheet, add normally
+                results.append(result_entry)
+            
             seen_keys.add(key)
+        
         filtered_results = self.filter_by_category(results, detected_category)
         filtered_results.sort(key=lambda x: x['score'], reverse=True)
         return filtered_results[:k], detected_category
