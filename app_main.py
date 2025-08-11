@@ -10,62 +10,106 @@ from sentence_transformers import SentenceTransformer
 
 class SemanticSearcher:
     """
-    A pure semantic searcher using FAISS and a SentenceTransformer model.
+    Semantic searcher with strict semantic category filtering.
     """
     def __init__(self, 
                  index_path: str = "vectorstore/faiss_index.index", 
                  metadata_path: str = "vectorstore/metadata.json",
                  model_name: str = "all-MiniLM-L6-v2"):
-        # Load FAISS index
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"FAISS index not found at {index_path}")
         self.index = faiss.read_index(index_path)
-
-        # Load metadata
         if not os.path.exists(metadata_path):
             raise FileNotFoundError(f"Metadata JSON not found at {metadata_path}")
         with open(metadata_path, "r", encoding="utf-8") as f:
             self.metadata = json.load(f)
-
-        # Load embedding model
         self.model = SentenceTransformer(model_name)
+        self.category_patterns = {
+            'tools': [
+                'tool', 'software', 'platform', 'application', 'system', 'technology',
+                'ai tool', 'productivity', 'design', 'automation', 'workflow', 'dashboard', 'solution', 'interface'
+            ],
+            'courses': [
+                'learn', 'course', 'training', 'education', 'program', 'curriculum', 'study',
+                'tutorial', 'workshop', 'certification', 'skill', 'knowledge', 'teach', 'instructor', 'class', 'lesson', 'academy', 'university', 'institute'
+            ],
+            'service-providers': [
+                'vendor', 'provider', 'company', 'agency', 'firm', 'consultant', 'service',
+                'business', 'organization', 'supplier', 'contractor', 'partner', 'client', 'professional', 'expert', 'specialist', 'freelancer', 'team'
+            ]
+        }
 
-    def search(self, query: str, k: int = 20, min_score: float = 0.30) -> list[dict]:
-        """
-        Perform a semantic-only search and return up to `k` results 
-        with score >= `min_score`.
-        """
-        # Encode query and search in FAISS
+    def detect_query_intent(self, query: str) -> str:
+        query_lower = query.lower()
+        category_scores = {}
+        for category, patterns in self.category_patterns.items():
+            pattern_text = ' '.join(patterns)
+            query_embedding = self.model.encode([query_lower])
+            pattern_embedding = self.model.encode([pattern_text])
+            similarity = np.dot(query_embedding, pattern_embedding.T) / (
+                np.linalg.norm(query_embedding) * np.linalg.norm(pattern_embedding)
+            )
+            category_scores[category] = similarity[0][0]
+            for pattern in patterns:
+                if pattern in query_lower:
+                    category_scores[category] += 0.3
+        if not category_scores:
+            return 'all'
+        best_category = max(category_scores, key=category_scores.get)
+        best_score = category_scores[best_category]
+        if best_score > 0.4:
+            return best_category
+        else:
+            return 'all'
+
+    def filter_by_category(self, results: list[dict], target_category: str) -> list[dict]:
+        if target_category == 'all':
+            return results
+        filtered_results = []
+        for result in results:
+            sheet_name = result['metadata'].get('sheet', '').lower()
+            values = result['metadata'].get('values', [])
+            category_val = str(values[0]).lower() if values else ''
+            # For tools, check both sheet and category value
+            if target_category == 'tools' and (
+                'tools' in sheet_name or 'tool' in category_val or 'ai tools' in category_val):
+                filtered_results.append(result)
+            elif target_category == 'courses' and (
+                'training' in sheet_name or 'program' in sheet_name or 'course' in category_val):
+                filtered_results.append(result)
+            elif target_category == 'service-providers' and (
+                'service' in sheet_name or 'provider' in sheet_name or 'provider' in category_val or 'vendor' in category_val):
+                filtered_results.append(result)
+        # If filter is too strict and nothing is found, fall back to all
+        if not filtered_results:
+            return results
+        return filtered_results
+
+    def search(self, query: str, k: int = 20, min_score: float = 0.30) -> tuple[list[dict], str]:
+        detected_category = self.detect_query_intent(query)
         query_vector = self.model.encode([query])
-        distances, indices = self.index.search(query_vector, k * 2)
-
+        search_multiplier = 3 if detected_category != 'all' else 2
+        distances, indices = self.index.search(query_vector, k * search_multiplier)
         results: list[dict] = []
         seen_keys: set[tuple] = set()
-
         for dist, idx in zip(distances[0], indices[0]):
             if idx < 0 or idx >= len(self.metadata):
                 continue
-
             item = self.metadata[idx]
-
-            # Unique key to avoid duplicates
             key = tuple(str(v) for v in item.get('values', []))
             if key in seen_keys:
                 continue
-
             score = 1 / (1 + dist)
             if score < min_score:
                 continue
-
             results.append({
                 'metadata': item,
                 'score': float(score)
             })
             seen_keys.add(key)
-
-        # Sort by score descending and return top k
-        results.sort(key=lambda x: x['score'], reverse=True)
-        return results[:k]
+        filtered_results = self.filter_by_category(results, detected_category)
+        filtered_results.sort(key=lambda x: x['score'], reverse=True)
+        return filtered_results[:k], detected_category
 
 
 @st.cache_resource
@@ -92,20 +136,27 @@ def main() -> None:
         st.error(f"⚠️ {e}")
         return
 
-    # Simple search input - no filter
-    query = st.text_input("Enter your search query:", placeholder="Example: machine learning tools")
-
+    query = st.text_input("Enter your search query:", placeholder="e.g. best AI tools, learn python, find a vendor")
     if query:
         if len(query.strip()) < 3:
             st.warning("Please enter a longer search query.")
         else:
             with st.spinner("🔍 Searching..."):
-                results = searcher.search(query, k=20, min_score=0.30)
-
+                results, detected_category = searcher.search(query, k=20, min_score=0.30)
+                category_icons = {
+                    'tools': '🛠️ Tools',
+                    'courses': '📚 Courses',
+                    'service-providers': '🏢 Providers',
+                    'all': '🌐 All Categories'
+                }
+                detected_display = category_icons.get(detected_category, detected_category)
+                st.info(f"🤖 **AI Detected Intent:** {detected_display}")
                 if results:
                     for i, res in enumerate(results, start=1):
                         header = ' | '.join(res['metadata'].get('values', []))
-                        with st.expander(f"Result {i}: {header} (Score: {res['score']:.3f})"):
+                        source_sheet = res['metadata'].get('sheet', 'Unknown')
+                        source_emoji = "🛠️" if "tools" in source_sheet.lower() else "📚" if "training" in source_sheet.lower() else "🏢"
+                        with st.expander(f"{source_emoji} Result {i}: {header} (Score: {res['score']:.3f})"):
                             detail_col, score_col = st.columns([2, 1])
                             with detail_col:
                                 st.markdown("#### Details")
@@ -114,21 +165,18 @@ def main() -> None:
                                     res['metadata'].get('values', [])
                                 ):
                                     st.write(f"**{key}:** {value}")
-                                st.write(f"**Source:** {res['metadata'].get('sheet', 'Unknown')}")
-
+                                st.write(f"**Source:** {source_emoji} {source_sheet}")
                             with score_col:
                                 st.markdown("#### Relevance Score")
                                 st.progress(res['score'])
                                 st.write(f"Semantic Score: {res['score']:.3f}")
                 else:
-                    st.info("No relevant results found for your query. Please try different search terms.")
+                    st.info(f"No {detected_display.lower()} found for your query. Try different search terms or be more specific.")
 
     with st.sidebar:
         st.markdown("### About")
         st.write("""
-        This search system uses:
-        - Pure Semantic Search (FAISS)
-        - Neural Language Model (all-MiniLM-L6-v2)
+        AI-powered search for tools, courses, and providers. Results are filtered by your intent when clear, or show all when ambiguous. No manual selection needed.
         """)
 
 
