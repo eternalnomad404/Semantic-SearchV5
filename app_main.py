@@ -19,7 +19,11 @@ load_dotenv()
 
 class SemanticSearcher:
     """
-    Hybrid searcher combining semantic search with TF-IDF keyword matching.
+    Hybrid searcher combining semantic sear                        # Create clickable title with hyperlink
+                        clickable_title = f"[{display_header}]({result_url})"
+                        
+                        # Handle case studies display
+                        if "case-studies" in source_sheet.lower():keyword matching.
     Final score = 0.7 * semantic_score + 0.3 * tfidf_score
     """
     def __init__(self, 
@@ -27,6 +31,21 @@ class SemanticSearcher:
                  metadata_path: str = "vectorstore/metadata.json",
                  tfidf_path: str = "vectorstore/tfidf.pkl",
                  model_name: str = "all-MiniLM-L6-v2"):
+        
+        # Define case study URLs mapping
+        self.case_study_urls = {
+            "learning link foundation": "https://dt4si.com/case-studies/learning-link-foundation",
+            "farmers for forest": "https://dt4si.com/case-studies/farmer-for-forest", 
+            "i-saksham": "https://dt4si.com/case-studies/i-saksham",
+            "vipla foundation": "https://dt4si.com/case-studies/vipla-foundation",
+            "educate girls predictive targeting to enroll girls": "https://dt4si.com/case-studies/educate-girls-predictive-targeting-to-enroll-girls",
+            "the akshaya patra foundation": "https://dt4si.com/case-studies/the-akshaya-patra-foundation",
+            "armman": "https://dt4si.com/case-studies/armman",
+            "lend a hand india": "https://dt4si.com/case-studies/lend-a-hand-india",
+            "anudip": "https://dt4si.com/case-studies/anudip",
+            "fmch": "https://dt4si.com/case-studies/fmch",
+            "educate girls": "https://dt4si.com/case-studies/educate-girls"
+        }
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"FAISS index not found at {index_path}")
         self.index = faiss.read_index(index_path)
@@ -62,6 +81,67 @@ class SemanticSearcher:
             raise ValueError(error_msg)
         
         self.groq_client = Groq(api_key=groq_api_key)
+
+    def _create_url_slug(self, text: str) -> str:
+        """Convert text to URL-friendly slug."""
+        import re
+        # Convert to lowercase
+        slug = text.lower()
+        # Replace spaces and special characters with hyphens
+        slug = re.sub(r'[^a-z0-9\s-]', '', slug)
+        slug = re.sub(r'\s+', '-', slug)
+        # Remove multiple hyphens
+        slug = re.sub(r'-+', '-', slug)
+        # Remove leading/trailing hyphens
+        slug = slug.strip('-')
+        return slug
+    
+    def _generate_result_url(self, result: dict) -> str:
+        """Generate appropriate URL for each result based on category."""
+        sheet_name = result['metadata'].get('sheet', '').lower()
+        values = result['metadata'].get('values', [])
+        
+        try:
+            # Tools - from "Cleaned Sheet"
+            if 'cleaned sheet' in sheet_name and len(values) >= 3:
+                tool_name = str(values[2]).strip()  # "Name of Tool" is at index 2
+                slug = self._create_url_slug(tool_name)
+                return f"https://dt4si.com/tools/{slug}"
+            
+            # Service Providers - from "Service Provider Profiles"  
+            elif 'service provider profiles' in sheet_name and len(values) >= 1:
+                provider_name = str(values[0]).strip()  # "Name of Service Provider" is at index 0
+                slug = self._create_url_slug(provider_name)
+                return f"https://dt4si.com/services/{slug}"
+            
+            # Courses - from "Training Program"
+            elif 'training program' in sheet_name and len(values) >= 3:
+                course_title = str(values[2]).strip()  # "Course Title" is at index 2
+                slug = self._create_url_slug(course_title)
+                return f"https://dt4si.com/courses/{slug}"
+            
+            # Case Studies - use predefined URLs
+            elif 'case-studies' in sheet_name or 'case study' in sheet_name:
+                if len(values) >= 1:
+                    case_study_title = str(values[0]).strip().lower()
+                    # Clean up the title for matching
+                    case_study_title = case_study_title.replace('- ', '').replace('(keyword:', '').split('(')[0].strip()
+                    
+                    # Find matching URL from predefined list
+                    for key, url in self.case_study_urls.items():
+                        if key in case_study_title or case_study_title in key:
+                            return url
+                    
+                    # Fallback: create generic case study URL
+                    slug = self._create_url_slug(case_study_title)
+                    return f"https://dt4si.com/case-studies/{slug}"
+            
+            # Fallback for any unmatched items
+            return "https://dt4si.com/"
+            
+        except Exception as e:
+            print(f"Error generating URL: {e}")
+            return "https://dt4si.com/"
 
     def detect_query_intent(self, query: str) -> str:
         """
@@ -375,6 +455,36 @@ def main() -> None:
                         header = ' | '.join(res['metadata'].get('values', []))
                         source_sheet = res['metadata'].get('sheet', 'Unknown')
                         
+                        # Generate URL for this result
+                        result_url = searcher._generate_result_url(res)
+                        
+                        # Determine title and emoji based on source
+                        if "case-studies" in source_sheet.lower():
+                            source_emoji = "📋"
+                            # For case studies, use the clean title as header
+                            case_study_title = res['metadata'].get('values', ['Unknown'])[0]
+                            # Clean up the title display
+                            clean_title = case_study_title.replace('- ', '').split('(')[0].strip()
+                            display_header = clean_title
+                        elif "tools" in source_sheet.lower() or "cleaned sheet" in source_sheet.lower():
+                            source_emoji = "🛠️"
+                            # For tools, use the tool name (index 2)
+                            values = res['metadata'].get('values', [])
+                            display_header = values[2] if len(values) >= 3 else header
+                        elif "training" in source_sheet.lower():
+                            source_emoji = "📚"
+                            # For courses, use the course title (index 2)
+                            values = res['metadata'].get('values', [])
+                            display_header = values[2] if len(values) >= 3 else header
+                        else:
+                            source_emoji = "🏢"
+                            # For service providers, use the provider name (index 0)
+                            values = res['metadata'].get('values', [])
+                            display_header = values[0] if len(values) >= 1 else header
+                        
+                        # Create clickable title with hyperlink
+                        clickable_title = f"[{display_header}]({result_url})"
+                        
                         # Determine emoji based on source
                         if "case-studies" in source_sheet.lower():
                             source_emoji = "�"
@@ -392,12 +502,12 @@ def main() -> None:
                             problem_type = res['metadata'].get('problem_type', 'Unknown')
                             word_count = res['metadata'].get('word_count', 0)
                             
-                            with st.expander(f"{source_emoji} Case Study {i}: {case_study_title} (Score: {res['score']:.3f})"):
+                            with st.expander(f"{source_emoji} Case Study {i}: {display_header} (Score: {res['score']:.3f})"):
                                 col1, col2 = st.columns([2, 1])
                                 
                                 with col1:
                                     st.markdown("#### Case Study Details")
-                                    st.write(f"**Title:** {case_study_title}")
+                                    st.markdown(f"**Title:** {clickable_title}")
                                     st.write(f"**Industry:** {industry}")
                                     st.write(f"**Problem Type:** {problem_type}")
                                 
@@ -408,16 +518,28 @@ def main() -> None:
                                     st.write(f"🧠 Semantic: {res['semantic_score']:.3f} (70%)")
                                     st.write(f"🔍 TF-IDF: {res['tfidf_score']:.3f} (30%)")
                         else:
-                            # Original display for other types
-                            with st.expander(f"{source_emoji} Result {i}: {header} (Hybrid Score: {res['score']:.3f})"):
+                            # Display for tools, courses, and service providers
+                            with st.expander(f"{source_emoji} Result {i}: {display_header} (Hybrid Score: {res['score']:.3f})"):
                                 detail_col, score_col = st.columns([2, 1])
                                 with detail_col:
                                     st.markdown("#### Details")
-                                    for key, value in zip(
-                                        res['metadata'].get('column_headers', []),
-                                        res['metadata'].get('values', [])
-                                    ):
-                                        st.write(f"**{key}:** {value}")
+                                    st.markdown(f"**Title:** {clickable_title}")
+                                    
+                                    # Display remaining details based on category
+                                    if "cleaned sheet" in source_sheet.lower():  # Tools
+                                        values = res['metadata'].get('values', [])
+                                        if len(values) >= 2:
+                                            st.write(f"**Category:** {values[0]}")
+                                            st.write(f"**Sub-Category:** {values[1]}")
+                                    elif "service provider profiles" in source_sheet.lower():  # Service Providers
+                                        # Only show the provider name as title, no additional details needed
+                                        pass
+                                    elif "training program" in source_sheet.lower():  # Courses
+                                        values = res['metadata'].get('values', [])
+                                        if len(values) >= 2:
+                                            st.write(f"**Skill:** {values[0]}")
+                                            st.write(f"**Topic:** {values[1]}")
+                                    
                                     st.write(f"**Source:** {source_emoji} {source_sheet}")
                                 with score_col:
                                     st.markdown("#### Relevance Scores")
