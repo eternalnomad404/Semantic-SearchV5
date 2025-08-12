@@ -427,9 +427,26 @@ Category:"""
             case_studies_results.sort(key=lambda x: x['score'], reverse=True)
             other_results.sort(key=lambda x: x['score'], reverse=True)
             
-            # Combine in desired order: tools → courses → service providers → case studies → other
-            top_results = (tools_results + courses_results + 
-                          service_providers_results + case_studies_results + other_results)
+            # Create category groups with their highest scores for ranking
+            category_groups = []
+            if tools_results:
+                category_groups.append(('tools', tools_results, tools_results[0]['score']))
+            if courses_results:
+                category_groups.append(('courses', courses_results, courses_results[0]['score']))
+            if service_providers_results:
+                category_groups.append(('service-providers', service_providers_results, service_providers_results[0]['score']))
+            if case_studies_results:
+                category_groups.append(('case-studies', case_studies_results, case_studies_results[0]['score']))
+            if other_results:
+                category_groups.append(('other', other_results, other_results[0]['score']))
+            
+            # Sort category groups by their highest score (highest first)
+            category_groups.sort(key=lambda x: x[2], reverse=True)
+            
+            # Combine results in order of category ranking by highest score
+            top_results = []
+            for category_name, category_results, highest_score in category_groups:
+                top_results.extend(category_results)
         
         return top_results, detected_category
 
