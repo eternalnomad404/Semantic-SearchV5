@@ -258,7 +258,75 @@ Category:"""
         
         filtered_results = self.filter_by_category(results, detected_category)
         filtered_results.sort(key=lambda x: x['score'], reverse=True)
-        return filtered_results[:k], detected_category
+        
+        # Take the top k results first
+        top_results = filtered_results[:k]
+        
+        # If showing all categories, reorganize by category groups while preserving scores
+        if detected_category == 'all':
+            # Define category order and identification
+            def get_result_category(result):
+                sheet_name = result['metadata'].get('sheet', '').lower()
+                values = result['metadata'].get('values', [])
+                category_val = str(values[0]).lower() if values else ''
+                
+                # Determine category based on sheet name and content
+                if ('cleaned sheet' in sheet_name or 
+                    'tool' in category_val or 
+                    'ai tools' in category_val or
+                    'software' in category_val.lower()):
+                    return 'tools'
+                elif ('training program' in sheet_name or 
+                      'training' in sheet_name or 
+                      'course' in category_val or
+                      'education' in category_val):
+                    return 'courses'
+                elif ('service provider profiles' in sheet_name or 
+                      'service' in sheet_name or 
+                      'provider' in sheet_name or 
+                      'provider' in category_val or 
+                      'vendor' in category_val or
+                      'company' in category_val):
+                    return 'service-providers'
+                elif ('case-studies' in sheet_name or 
+                      'case study' in sheet_name or
+                      sheet_name == 'case-studies'):
+                    return 'case-studies'
+                else:
+                    return 'other'
+            
+            # Group results by category
+            tools_results = []
+            courses_results = []
+            service_providers_results = []
+            case_studies_results = []
+            other_results = []
+            
+            for result in top_results:
+                category = get_result_category(result)
+                if category == 'tools':
+                    tools_results.append(result)
+                elif category == 'courses':
+                    courses_results.append(result)
+                elif category == 'service-providers':
+                    service_providers_results.append(result)
+                elif category == 'case-studies':
+                    case_studies_results.append(result)
+                else:
+                    other_results.append(result)
+            
+            # Sort each category by score (highest first)
+            tools_results.sort(key=lambda x: x['score'], reverse=True)
+            courses_results.sort(key=lambda x: x['score'], reverse=True)
+            service_providers_results.sort(key=lambda x: x['score'], reverse=True)
+            case_studies_results.sort(key=lambda x: x['score'], reverse=True)
+            other_results.sort(key=lambda x: x['score'], reverse=True)
+            
+            # Combine in desired order: tools → courses → service providers → case studies → other
+            top_results = (tools_results + courses_results + 
+                          service_providers_results + case_studies_results + other_results)
+        
+        return top_results, detected_category
 
 
 @st.cache_resource
