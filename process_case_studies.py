@@ -7,6 +7,11 @@ import os
 import re
 from docx import Document
 import json
+from groq import Groq
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def extract_case_studies_from_docx(docx_path: str) -> list[dict]:
     """
@@ -194,7 +199,65 @@ def extract_problem_type_from_text(text: str) -> str:
     return 'Business Challenge'
 
 def create_summary(text: str, max_chars: int = 300) -> str:
-    """Create a summary of the case study."""
+    """Create a summary of the case study using GROQ AI."""
+    try:
+        # Initialize GROQ client
+        groq_api_key = os.getenv('GROQ_API_KEY')
+        if not groq_api_key:
+            print("⚠️ GROQ_API_KEY not found, using fallback summary")
+            return create_fallback_summary(text, max_chars)
+        
+        groq_client = Groq(api_key=groq_api_key)
+        
+        # Create focused prompt for keyword-rich summary
+        prompt = f"""
+Create a concise, keyword-rich summary of this digital transformation case study.
+
+Requirements:
+- Exactly 200-250 words
+- Include specific technologies, platforms, tools (e.g., Salesforce, Microsoft Dynamics, AI tools)
+- Include key metrics and outcomes (percentages, numbers)
+- Include industry context and problem types
+- Focus on technical implementation and measurable results
+- Use searchable keywords someone would look for
+
+Case Study:
+{text[:2500]}
+
+Generate a focused summary with important technical keywords:"""
+
+        completion = groq_client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            model="llama-3.1-8b-instant",
+            temperature=0.2,
+            max_tokens=350
+        )
+        
+        summary = completion.choices[0].message.content.strip()
+        
+        if not summary or len(summary) < 50:
+            print("⚠️ GROQ returned insufficient summary, using fallback")
+            return create_fallback_summary(text, max_chars)
+        
+        # Ensure reasonable length
+        words = summary.split()
+        if len(words) > 300:
+            summary = ' '.join(words[:300])
+        
+        print(f"✅ GROQ summary generated: {len(words)} words")
+        return summary
+        
+    except Exception as e:
+        print(f"⚠️ Error with GROQ summary generation: {e}")
+        return create_fallback_summary(text, max_chars)
+
+def create_fallback_summary(text: str, max_chars: int = 300) -> str:
+    """Fallback method: Create a summary of the case study."""
     # Take first few sentences up to max_chars
     sentences = text.split('.')
     summary = ""

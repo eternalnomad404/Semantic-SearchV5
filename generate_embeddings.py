@@ -53,7 +53,7 @@ sheet_configs = [
     {
         "type": "case_studies",
         "filename": "case_studies_metadata.json",
-        "embed_fields": ["title", "industry", "problem_type", "summary", "full_text"],
+        "embed_fields": ["title", "industry", "problem_type", "summary"],  # Removed full_text, focused on GROQ summary
         "display_fields": ["title", "industry", "problem_type"],
         "column_headers": ["Title", "Industry", "Problem Type"]
     }
@@ -89,11 +89,7 @@ for config in sheet_configs:
                 embed_text_parts = []
                 for field in config["embed_fields"]:
                     if field in cs and cs[field]:
-                        # Limit full_text to avoid too long embeddings
-                        if field == "full_text":
-                            text = cs[field][:2000]  # Limit to 2000 chars for manageable embeddings
-                        else:
-                            text = str(cs[field])
+                        text = str(cs[field])
                         embed_text_parts.append(text)
                 
                 embed_text = " ".join(embed_text_parts)
