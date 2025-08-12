@@ -9,8 +9,12 @@ import pickle
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from difflib import SequenceMatcher
 import re
+from groq import Groq
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
 class SemanticSearcher:
@@ -40,157 +44,132 @@ class SemanticSearcher:
             self.tfidf_vectors = tfidf_data['vectors']
             
         self.model = SentenceTransformer(model_name)
-        self.category_patterns = {
-            'tools': [
-                'tool', 'tools', 'software', 'softwares', 'platform', 'platforms', 'application', 'applications', 'apps', 'app',
-                'system', 'systems', 'technology', 'technologies', 'tech', 'ai tool', 'ai tools', 'productivity', 
-                'design', 'automation', 'workflow', 'workflows', 'dashboard', 'dashboards', 'solution', 'solutions', 'interface'
-            ],
-            'courses': [
-                'learn', 'learning', 'course', 'courses', 'training', 'trainings', 'education', 'educational', 
-                'program', 'programs', 'curriculum', 'study', 'studies', 'tutorial', 'tutorials', 'workshop', 'workshops',
-                'certification', 'certifications', 'skill', 'skills', 'knowledge', 'teach', 'teaching', 'instructor', 
-                'class', 'classes', 'lesson', 'lessons', 'academy', 'university', 'institute', 'learning program', 
-                'online course', 'online courses', 'degree', 'degrees', 'certificate', 'certificates'
-            ],
-            'service-providers': [
-                'vendor', 'vendors', 'provider', 'providers', 'company', 'companies', 'agency', 'agencies', 
-                'firm', 'firms', 'consultant', 'consultants', 'service', 'services', 'business', 'businesses',
-                'organization', 'organizations', 'supplier', 'suppliers', 'contractor', 'contractors', 
-                'partner', 'partners', 'client', 'clients', 'professional', 'professionals', 'expert', 'experts', 
-                'specialist', 'specialists', 'freelancer', 'freelancers', 'team', 'teams', 'service provider'
-            ],
-            'case-studies': [
-                'case study', 'case studies', 'case-study', 'case-studies', 'casestudy', 'casestudies',
-                'case', 'cases', 'example', 'examples', 'success story', 'success stories', 'implementation', 
-                'implementations', 'experience', 'experiences', 'best practice', 'best practices', 'lesson', 'lessons',
-                'project', 'projects', 'initiative', 'initiatives', 'transformation', 'transformations', 
-                'outcome', 'outcomes', 'impact', 'result', 'results', 'achievement', 'achievements', 
-                'challenge', 'challenges', 'solution', 'approach', 'use case', 'use cases',
-                # Add more specific case study terms to boost semantic similarity
-                'case study analysis', 'case study research', 'case study method', 'case study findings',
-                'real world example', 'practical example', 'business case', 'case analysis',
-                'field study', 'empirical study', 'applied research', 'business example'
-            ]
-        }
+        
+        # Initialize GROQ client with environment variable
+        groq_api_key = os.getenv('GROQ_API_KEY')
+        if not groq_api_key:
+            error_msg = """
+            GROQ_API_KEY environment variable is not set.
+            
+            For local development:
+            1. Copy .env.example to .env
+            2. Add your GROQ API key to the .env file
+            
+            For deployment:
+            1. Set GROQ_API_KEY as an environment variable in your deployment platform
+            2. Get your API key from: https://console.groq.com/
+            """
+            raise ValueError(error_msg)
+        
+        self.groq_client = Groq(api_key=groq_api_key)
 
     def detect_query_intent(self, query: str) -> str:
-        from difflib import SequenceMatcher
-        query_lower = query.lower()
-        category_scores = {}
-        for category, patterns in self.category_patterns.items():
-            pattern_text = ' '.join(patterns)
-            query_embedding = self.model.encode([query_lower])
-            pattern_embedding = self.model.encode([pattern_text])
-            similarity = np.dot(query_embedding, pattern_embedding.T) / (
-                np.linalg.norm(query_embedding) * np.linalg.norm(pattern_embedding)
-            )
-            category_scores[category] = similarity[0][0]
-            
-            # Check for exact pattern matches
-            for pattern in patterns:
-                if pattern in query_lower:
-                    # Give higher bonus for case-study patterns to ensure they always score above 0.3
-                    if category == 'case-studies' and any(cs_term in pattern for cs_term in ['case', 'study', 'example', 'success']):
-                        category_scores[category] += 0.5  # Higher bonus for case study patterns
-                    else:
-                        category_scores[category] += 0.4  # Standard bonus for other patterns
-                    
-                # Special handling for multi-word patterns like "case study"
-                pattern_words = pattern.split()
-                query_words = query_lower.split()
-                if len(pattern_words) > 1 and len(query_words) >= len(pattern_words):
-                    # Check if query contains most words from the pattern
-                    matches = 0
-                    for pattern_word in pattern_words:
-                        for query_word in query_words:
-                            if SequenceMatcher(None, query_word, pattern_word).ratio() >= 0.7:
-                                matches += 1
-                                break
-                    if matches >= len(pattern_words) - 1:  # Allow one mismatch
-                        category_scores[category] += 0.3
-            
-            # Add fuzzy matching bonus
-            fuzzy_bonus = self._calculate_fuzzy_bonus(query_lower, patterns)
-            category_scores[category] += fuzzy_bonus
-            
-        if not category_scores:
-            return 'all'
-        best_category = max(category_scores, key=category_scores.get)
-        best_score = category_scores[best_category]
-        
-        # Handle generic queries that should return 'all'
-        generic_queries = ['search', 'find', 'help', 'what', 'show', 'get', 'give']
-        if any(word in query_lower for word in generic_queries) and len(query_lower.split()) <= 2:
-            # If it's a short generic query, return 'all' regardless of score
-            if best_score < 0.6:  # Only override if score isn't very high
-                return 'all'
-        
-        # Be less aggressive with filtering for broad terms  
-        # Use threshold of 0.3 to prevent gibberish while catching legitimate queries
-        if best_score > 0.3:
-            return best_category
-        
-        return 'all'
-    
-    def _calculate_fuzzy_bonus(self, query_lower, patterns):
-        """Calculate bonus score for fuzzy matches"""
-        max_bonus = 0
-        query_words = query_lower.split()
-        
-        # Check if this is case-study related patterns
-        is_case_study_category = any(cs_term in ' '.join(patterns).lower() for cs_term in ['case study', 'example', 'success story'])
-        
-        for pattern in patterns:
-            pattern_words = pattern.split()
-            
-            # Check word-to-word similarity
-            for word in query_words:
-                for pattern_word in pattern_words:
-                    similarity = SequenceMatcher(None, word, pattern_word).ratio()
-                    if similarity >= 0.75:  # 75% similarity threshold
-                        bonus = 0.4 if is_case_study_category else 0.3  # Higher bonus for case studies
-                        max_bonus = max(max_bonus, bonus)
-                    elif similarity >= 0.6:  # 60% similarity threshold
-                        bonus = 0.3 if is_case_study_category else 0.2  # Higher bonus for case studies
-                        max_bonus = max(max_bonus, bonus)
-                    elif similarity >= 0.5:  # 50% similarity threshold for typos
-                        bonus = 0.25 if is_case_study_category else 0.15  # Higher bonus for case studies
-                        max_bonus = max(max_bonus, bonus)
-            
-            # Also check if query contains most of the pattern
-            pattern_lower = pattern.lower()
-            if len(query_lower) >= 3 and len(pattern_lower) >= 3:
-                overall_similarity = SequenceMatcher(None, query_lower, pattern_lower).ratio()
-                if overall_similarity >= 0.7:
-                    bonus = 0.35 if is_case_study_category else 0.25  # Higher bonus for case studies
-                    max_bonus = max(max_bonus, bonus)
-        
-        return max_bonus
+        """
+        Use GROQ LLM to detect query intent and classify into categories.
+        """
+        try:
+            prompt = f"""
+You are an expert query classifier for a search system. Analyze the user's query and classify it into exactly one category.
 
+Categories and Examples:
+1. "tools" - software, applications, platforms, systems, technology, AI tools, productivity tools, design software, automation tools, dashboards, solutions, interfaces
+   Examples: "project management tool", "design software", "AI automation platform", "productivity app"
+
+2. "courses" - learning, training, education, courses, tutorials, workshops, certifications, skills, teaching, programs, curriculum, classes
+   Examples: "Python course", "data science training", "web development tutorial", "certification program"
+
+3. "service-providers" - vendors, providers, companies, agencies, consultants, businesses, professionals, experts, freelancers, firms, contractors
+   Examples: "web development company", "consulting firm", "graphic designer", "IT services", "marketing agency"
+
+4. "case-studies" - case studies, examples, success stories, implementations, experiences, best practices, projects, real-world examples
+   Examples: "success story", "implementation example", "case study", "real world example", "business case"
+
+5. "all" - very general queries, ambiguous queries, or queries that could apply to multiple categories
+   Examples: "help", "search", "what do you have", "show me options"
+
+User Query: "{query}"
+
+Important Rules:
+- Respond with ONLY the category name (exactly one of: tools, courses, service-providers, case-studies, all)
+- Focus on the main intent and key words in the query
+- If the query mentions software, applications, platforms, or technology solutions, classify as "tools"
+- If the query mentions companies, agencies, providers, or professional services, classify as "service-providers"
+- If the query is very general or unclear, classify as "all"
+
+Category:"""
+
+            completion = self.groq_client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model="llama-3.1-8b-instant",
+                temperature=0.1,
+                max_tokens=10
+            )
+            
+            result = completion.choices[0].message.content.strip().lower()
+            
+            # Validate the result
+            valid_categories = ['tools', 'courses', 'service-providers', 'case-studies', 'all']
+            if result in valid_categories:
+                return result
+            else:
+                # Fallback to 'all' if invalid response
+                return 'all'
+                
+        except Exception as e:
+            print(f"Error in GROQ intent detection: {e}")
+            # Fallback to 'all' on error
+            return 'all'
+    
     def filter_by_category(self, results: list[dict], target_category: str) -> list[dict]:
         if target_category == 'all':
             return results
+        
         filtered_results = []
         for result in results:
             sheet_name = result['metadata'].get('sheet', '').lower()
             values = result['metadata'].get('values', [])
             category_val = str(values[0]).lower() if values else ''
-            # For tools, check both sheet and category value
+            
+            # Match based on actual sheet names from the data
             if target_category == 'tools' and (
-                'tools' in sheet_name or 'tool' in category_val or 'ai tools' in category_val):
+                'cleaned sheet' in sheet_name or 
+                'tool' in category_val or 
+                'ai tools' in category_val or
+                'software' in category_val.lower()):
                 filtered_results.append(result)
+                
             elif target_category == 'courses' and (
-                'training' in sheet_name or 'program' in sheet_name or 'course' in category_val):
+                'training program' in sheet_name or 
+                'training' in sheet_name or 
+                'course' in category_val or
+                'education' in category_val):
                 filtered_results.append(result)
+                
             elif target_category == 'service-providers' and (
-                'service' in sheet_name or 'provider' in sheet_name or 'provider' in category_val or 'vendor' in category_val):
+                'service provider profiles' in sheet_name or 
+                'service' in sheet_name or 
+                'provider' in sheet_name or 
+                'provider' in category_val or 
+                'vendor' in category_val or
+                'company' in category_val):
                 filtered_results.append(result)
-            elif target_category == 'case-studies' and 'case-studies' in sheet_name:
+                
+            elif target_category == 'case-studies' and (
+                'case-studies' in sheet_name or 
+                'case study' in sheet_name or
+                sheet_name == 'case-studies'):
                 filtered_results.append(result)
-        # If filter is too strict and nothing is found, fall back to all
-        if not filtered_results:
+        
+        # If filter is too strict and nothing is found, fall back to all results
+        if not filtered_results and target_category != 'all':
+            print(f"Warning: No results found for category '{target_category}', returning all results")
             return results
+            
         return filtered_results
 
     def search(self, query: str, k: int = 20, min_score: float = 0.30) -> tuple[list[dict], str]:
