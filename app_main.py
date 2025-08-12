@@ -64,23 +64,23 @@ class SemanticSearcher:
             
         self.model = SentenceTransformer(model_name)
         
-        # Initialize GROQ client with environment variable
-        groq_api_key = os.getenv('GROQ_API_KEY')
-        if not groq_api_key:
-            error_msg = """
-            GROQ_API_KEY environment variable is not set.
-            
-            For local development:
-            1. Copy .env.example to .env
-            2. Add your GROQ API key to the .env file
-            
-            For deployment:
-            1. Set GROQ_API_KEY as an environment variable in your deployment platform
-            2. Get your API key from: https://console.groq.com/
-            """
-            raise ValueError(error_msg)
-        
-        self.groq_client = Groq(api_key=groq_api_key)
+        # Initialize GROQ client lazily (only when needed)
+        self.groq_client = None
+
+    def _get_groq_client(self):
+        """Initialize GROQ client lazily."""
+        if self.groq_client is None:
+            groq_api_key = os.getenv('GROQ_API_KEY')
+            if groq_api_key:
+                try:
+                    self.groq_client = Groq(api_key=groq_api_key)
+                except Exception as e:
+                    print(f"⚠️ Failed to initialize GROQ client: {e}")
+                    self.groq_client = False  # Mark as failed
+            else:
+                print("⚠️ GROQ_API_KEY not found, using fallback intent detection")
+                self.groq_client = False  # Mark as unavailable
+        return self.groq_client if self.groq_client is not False else None
 
     def _create_url_slug(self, text: str) -> str:
         """Convert text to URL-friendly slug."""
@@ -146,9 +146,13 @@ class SemanticSearcher:
     def detect_query_intent(self, query: str) -> str:
         """
         Use GROQ LLM to detect query intent and classify into categories.
+        Falls back to keyword-based detection if GROQ is unavailable.
         """
-        try:
-            prompt = f"""
+        # Try GROQ first
+        groq_client = self._get_groq_client()
+        if groq_client:
+            try:
+                prompt = f"""
 You are an expert query classifier for a search system. Analyze the user's query and classify it into exactly one category.
 
 Categories and Examples:
@@ -178,32 +182,53 @@ Important Rules:
 
 Category:"""
 
-            completion = self.groq_client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                model="llama-3.1-8b-instant",
-                temperature=0.1,
-                max_tokens=10
-            )
-            
-            result = completion.choices[0].message.content.strip().lower()
-            
-            # Validate the result
-            valid_categories = ['tools', 'courses', 'service-providers', 'case-studies', 'all']
-            if result in valid_categories:
-                return result
-            else:
-                # Fallback to 'all' if invalid response
-                return 'all'
+                completion = groq_client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    model="llama-3.1-8b-instant",
+                    temperature=0.1,
+                    max_tokens=10
+                )
                 
-        except Exception as e:
-            print(f"Error in GROQ intent detection: {e}")
-            # Fallback to 'all' on error
-            return 'all'
+                result = completion.choices[0].message.content.strip().lower()
+                
+                # Validate the result
+                valid_categories = ['tools', 'courses', 'service-providers', 'case-studies', 'all']
+                if result in valid_categories:
+                    return result
+                    
+            except Exception as e:
+                print(f"Error in GROQ intent detection: {e}")
+        
+        # Fallback to keyword-based detection
+        return self._fallback_intent_detection(query)
+    
+    def _fallback_intent_detection(self, query: str) -> str:
+        """Fallback keyword-based intent detection when GROQ is unavailable."""
+        query_lower = query.lower()
+        
+        # Case studies keywords
+        if any(word in query_lower for word in ['case study', 'case-study', 'example', 'success story', 'implementation']):
+            return 'case-studies'
+        
+        # Tools keywords
+        if any(word in query_lower for word in ['tool', 'software', 'app', 'platform', 'system', 'ai', 'automation']):
+            return 'tools'
+        
+        # Courses keywords
+        if any(word in query_lower for word in ['course', 'training', 'learn', 'education', 'tutorial', 'certification']):
+            return 'courses'
+        
+        # Service providers keywords
+        if any(word in query_lower for word in ['company', 'agency', 'provider', 'vendor', 'consultant', 'service']):
+            return 'service-providers'
+        
+        # Default to all for general queries
+        return 'all'
     
     def filter_by_category(self, results: list[dict], target_category: str) -> list[dict]:
         if target_category == 'all':
@@ -449,7 +474,11 @@ def main() -> None:
                     'all': '🌐 All Categories'
                 }
                 detected_display = category_icons.get(detected_category, detected_category)
-                st.info(f"🤖 **AI Detected Intent:** {detected_display}")
+                
+                # Check if GROQ is available
+                groq_available = searcher._get_groq_client() is not None
+                ai_status = "🤖 **AI-Powered Intent**" if groq_available else "🔧 **Keyword-Based Intent**"
+                st.info(f"{ai_status}: {detected_display}")
                 if results:
                     for i, res in enumerate(results, start=1):
                         header = ' | '.join(res['metadata'].get('values', []))
@@ -552,10 +581,16 @@ def main() -> None:
 
     with st.sidebar:
         st.markdown("### About")
-        st.write("""
+        
+        # Check GROQ availability for sidebar display
+        groq_available = searcher._get_groq_client() is not None
+        intent_method = "AI-powered intent detection" if groq_available else "Keyword-based intent detection"
+        
+        st.write(f"""
         🤖 **Hybrid AI Search** combining:
         - **70% Semantic Search**: Understanding context and meaning
         - **30% TF-IDF Keyword**: Exact keyword matching
+        - **{intent_method}**: Automatically categorizes your query
         
         Results are filtered by your intent when clear, or show all when ambiguous. No manual selection needed.
         """)
