@@ -281,17 +281,13 @@ Category:"""
         return filtered_results
 
     def search(self, query: str, k: int = 20, min_score: float = 0.30) -> tuple[list[dict], str]:
-        detected_category = self.detect_query_intent(query)
+        # Always use 'all' categories - no intent detection
+        detected_category = 'all'
         
         # Semantic search component
         query_vector = self.model.encode([query])
-        # Use larger multiplier for case-studies to ensure all case studies are found
-        if detected_category == 'case-studies':
-            search_multiplier = 30  # Even larger to catch ALL case studies including low-similarity ones
-        elif detected_category != 'all':
-            search_multiplier = 3
-        else:
-            search_multiplier = 2
+        # Use consistent multiplier for comprehensive search across all categories
+        search_multiplier = 2
         distances, indices = self.index.search(query_vector, k * search_multiplier)
         
         # TF-IDF search component
@@ -318,10 +314,6 @@ Category:"""
             
             # Calculate hybrid score: 70% semantic + 30% TF-IDF
             hybrid_score = 0.7 * semantic_score + 0.3 * tfidf_score
-            
-            # Boost case study scores to ensure they stay well above threshold
-            if detected_category == 'case-studies' and item.get('sheet', '').lower().find('case') != -1:
-                hybrid_score = min(1.0, hybrid_score + 0.05)  # Small boost, cap at 1.0
             
             if hybrid_score < min_score:
                 continue
@@ -364,102 +356,99 @@ Category:"""
             
             seen_keys.add(key)
         
-        filtered_results = self.filter_by_category(results, detected_category)
+        # Always show all categories with semantic-based stacking
+        # No category filtering - show results from all categories
+        filtered_results = results
         filtered_results.sort(key=lambda x: x['score'], reverse=True)
         
-        # If showing all categories, reorganize by category groups while preserving scores
-        if detected_category == 'all':
-            # Define category order and identification
-            def get_result_category(result):
-                sheet_name = result['metadata'].get('sheet', '').lower()
-                values = result['metadata'].get('values', [])
-                category_val = str(values[0]).lower() if values else ''
-                
-                # IMPORTANT: Prioritize sheet-based identification to avoid misclassification
-                # Check case studies first since they can have misleading content keywords
-                if ('case-studies' in sheet_name or 
-                    'case study' in sheet_name or
-                    sheet_name == 'case-studies'):
-                    return 'case-studies'
-                # Then check other categories based on sheet name and content
-                elif ('cleaned sheet' in sheet_name or 
-                      'tool' in category_val or 
-                      'ai tools' in category_val or
-                      'software' in category_val.lower()):
-                    return 'tools'
-                elif ('training program' in sheet_name or 
-                      'training' in sheet_name or 
-                      'course' in category_val or
-                      'education' in category_val):
-                    return 'courses'
-                elif ('service provider profiles' in sheet_name or 
-                      'service' in sheet_name or 
-                      'provider' in sheet_name or 
-                      'provider' in category_val or 
-                      'vendor' in category_val or
-                      'company' in category_val):
-                    return 'service-providers'
-                elif ('case-studies' in sheet_name or 
-                      'case study' in sheet_name or
-                      sheet_name == 'case-studies'):
-                    return 'case-studies'
-                else:
-                    return 'other'
+        # Always reorganize by category groups while preserving semantic scores
+        # Define category order and identification
+        def get_result_category(result):
+            sheet_name = result['metadata'].get('sheet', '').lower()
+            values = result['metadata'].get('values', [])
+            category_val = str(values[0]).lower() if values else ''
             
-            # Group results by category
-            tools_results = []
-            courses_results = []
-            service_providers_results = []
-            case_studies_results = []
-            other_results = []
-            
-            for result in filtered_results:
-                category = get_result_category(result)
-                if category == 'tools':
-                    tools_results.append(result)
-                elif category == 'courses':
-                    courses_results.append(result)
-                elif category == 'service-providers':
-                    service_providers_results.append(result)
-                elif category == 'case-studies':
-                    case_studies_results.append(result)
-                else:
-                    other_results.append(result)
-            
-            # Sort each category by score (highest first)
-            tools_results.sort(key=lambda x: x['score'], reverse=True)
-            courses_results.sort(key=lambda x: x['score'], reverse=True)
-            service_providers_results.sort(key=lambda x: x['score'], reverse=True)
-            case_studies_results.sort(key=lambda x: x['score'], reverse=True)
-            other_results.sort(key=lambda x: x['score'], reverse=True)
-            
-            # Create category groups with their highest scores for ranking
-            category_groups = []
-            if tools_results:
-                category_groups.append(('tools', tools_results, tools_results[0]['score']))
-            if courses_results:
-                category_groups.append(('courses', courses_results, courses_results[0]['score']))
-            if service_providers_results:
-                category_groups.append(('service-providers', service_providers_results, service_providers_results[0]['score']))
-            if case_studies_results:
-                category_groups.append(('case-studies', case_studies_results, case_studies_results[0]['score']))
-            if other_results:
-                category_groups.append(('other', other_results, other_results[0]['score']))
-            
-            # Sort category groups by their highest score (highest first)
-            category_groups.sort(key=lambda x: x[2], reverse=True)
-            
-            # Combine results in order of category ranking by highest score
-            top_results = []
-            for category_name, category_results, highest_score in category_groups:
-                top_results.extend(category_results)
-        else:
-            # For specific categories, just take top k results
-            top_results = filtered_results[:k]
+            # IMPORTANT: Prioritize sheet-based identification to avoid misclassification
+            # Check case studies first since they can have misleading content keywords
+            if ('case-studies' in sheet_name or 
+                'case study' in sheet_name or
+                sheet_name == 'case-studies'):
+                return 'case-studies'
+            # Then check other categories based on sheet name and content
+            elif ('cleaned sheet' in sheet_name or 
+                  'tool' in category_val or 
+                  'ai tools' in category_val or
+                  'software' in category_val.lower()):
+                return 'tools'
+            elif ('training program' in sheet_name or 
+                  'training' in sheet_name or 
+                  'course' in category_val or
+                  'education' in category_val):
+                return 'courses'
+            elif ('service provider profiles' in sheet_name or 
+                  'service' in sheet_name or 
+                  'provider' in sheet_name or 
+                  'provider' in category_val or 
+                  'vendor' in category_val or
+                  'company' in category_val):
+                return 'service-providers'
+            elif ('case-studies' in sheet_name or 
+                  'case study' in sheet_name or
+                  sheet_name == 'case-studies'):
+                return 'case-studies'
+            else:
+                return 'other'
         
-        # Take the top k results after stacking (if all categories)
-        if detected_category == 'all':
-            top_results = top_results[:k]
+        # Group results by category
+        tools_results = []
+        courses_results = []
+        service_providers_results = []
+        case_studies_results = []
+        other_results = []
+        
+        for result in filtered_results:
+            category = get_result_category(result)
+            if category == 'tools':
+                tools_results.append(result)
+            elif category == 'courses':
+                courses_results.append(result)
+            elif category == 'service-providers':
+                service_providers_results.append(result)
+            elif category == 'case-studies':
+                case_studies_results.append(result)
+            else:
+                other_results.append(result)
+        
+        # Sort each category by score (highest first)
+        tools_results.sort(key=lambda x: x['score'], reverse=True)
+        courses_results.sort(key=lambda x: x['score'], reverse=True)
+        service_providers_results.sort(key=lambda x: x['score'], reverse=True)
+        case_studies_results.sort(key=lambda x: x['score'], reverse=True)
+        other_results.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Create category groups with their highest scores for ranking
+        category_groups = []
+        if tools_results:
+            category_groups.append(('tools', tools_results, tools_results[0]['score']))
+        if courses_results:
+            category_groups.append(('courses', courses_results, courses_results[0]['score']))
+        if service_providers_results:
+            category_groups.append(('service-providers', service_providers_results, service_providers_results[0]['score']))
+        if case_studies_results:
+            category_groups.append(('case-studies', case_studies_results, case_studies_results[0]['score']))
+        if other_results:
+            category_groups.append(('other', other_results, other_results[0]['score']))
+        
+        # Sort category groups by their highest score (highest first)
+        category_groups.sort(key=lambda x: x[2], reverse=True)
+        
+        # Combine results in order of category ranking by highest score
+        top_results = []
+        for category_name, category_results, highest_score in category_groups:
+            top_results.extend(category_results)
+        
+        # Take the top k results after stacking
+        top_results = top_results[:k]
         
         return top_results, detected_category
 
@@ -496,19 +485,9 @@ def main() -> None:
         else:
             with st.spinner("🔍 Searching..."):
                 results, detected_category = searcher.search(query, k=20, min_score=0.3)
-                category_icons = {
-                    'tools': '🛠️ Tools',
-                    'courses': '📚 Courses',
-                    'service-providers': '🏢 Providers',
-                    'case-studies': '📋 Case Studies',
-                    'all': '🌐 All Categories'
-                }
-                detected_display = category_icons.get(detected_category, detected_category)
                 
-                # Check if GROQ is available
-                groq_available = searcher._get_groq_client() is not None
-                ai_status = "🤖 **AI-Powered Intent**" if groq_available else "🔧 **Keyword-Based Intent**"
-                st.info(f"{ai_status}: {detected_display}")
+                # Show search results grouped by semantic relevance
+                st.info("🌐 **All Categories**: Results organized by semantic relevance")
                 if results:
                     for i, res in enumerate(results, start=1):
                         header = ' | '.join(res['metadata'].get('values', []))
@@ -607,22 +586,18 @@ def main() -> None:
                                     st.write(f"🧠 Semantic: {res['semantic_score']:.3f} (70%)")
                                     st.write(f"🔍 TF-IDF: {res['tfidf_score']:.3f} (30%)")
                 else:
-                    st.info(f"No {detected_display.lower()} found for your query. Try different search terms or be more specific.")
+                    st.info(f"No results found for your query. Try different search terms or be more specific.")
 
     with st.sidebar:
         st.markdown("### About")
-        
-        # Check GROQ availability for sidebar display
-        groq_available = searcher._get_groq_client() is not None
-        intent_method = "AI-powered intent detection" if groq_available else "Keyword-based intent detection"
         
         st.write(f"""
         🤖 **Hybrid AI Search** combining:
         - **70% Semantic Search**: Understanding context and meaning
         - **30% TF-IDF Keyword**: Exact keyword matching
-        - **{intent_method}**: Automatically categorizes your query
+        - **Smart Category Stacking**: Results organized by semantic relevance
         
-        Results are filtered by your intent when clear, or show all when ambiguous. No manual selection needed.
+        All categories are searched and results are dynamically stacked based on semantic similarity scores.
         """)
         
         st.markdown("### Search Tips")
