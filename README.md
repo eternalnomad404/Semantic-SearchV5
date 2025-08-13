@@ -12,8 +12,8 @@ To run locally, you need:
 
 ```bash
 # 1️⃣ Clone the repository
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/eternalnomad404/Semantic-SearchV5.git
+cd Semantic-SearchV5
 
 # 2️⃣ Create a virtual environment
 python -m venv venv
