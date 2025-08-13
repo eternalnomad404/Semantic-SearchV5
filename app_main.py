@@ -10,7 +10,6 @@ from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
-from groq import Groq
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -64,23 +63,9 @@ class SemanticSearcher:
             
         self.model = SentenceTransformer(model_name)
         
-        # Initialize GROQ client lazily (only when needed)
+        # Initialize GROQ client lazily (only when needed) - NOT USED ANYMORE
+        # Keeping for backward compatibility in case other code references it
         self.groq_client = None
-
-    def _get_groq_client(self):
-        """Initialize GROQ client lazily."""
-        if self.groq_client is None:
-            groq_api_key = os.getenv('GROQ_API_KEY')
-            if groq_api_key:
-                try:
-                    self.groq_client = Groq(api_key=groq_api_key)
-                except Exception as e:
-                    print(f"⚠️ Failed to initialize GROQ client: {e}")
-                    self.groq_client = False  # Mark as failed
-            else:
-                print("⚠️ GROQ_API_KEY not found, using fallback intent detection")
-                self.groq_client = False  # Mark as unavailable
-        return self.groq_client if self.groq_client is not False else None
 
     def _create_url_slug(self, text: str) -> str:
         """Convert text to URL-friendly slug."""
@@ -142,143 +127,6 @@ class SemanticSearcher:
         except Exception as e:
             print(f"Error generating URL: {e}")
             return "https://dt4si.com/"
-
-    def detect_query_intent(self, query: str) -> str:
-        """
-        Use GROQ LLM to detect query intent and classify into categories.
-        Falls back to keyword-based detection if GROQ is unavailable.
-        """
-        # Try GROQ first
-        groq_client = self._get_groq_client()
-        if groq_client:
-            try:
-                prompt = f"""
-You are an expert query classifier for a search system. Analyze the user's query and classify it into exactly one category.
-
-Categories and Examples:
-1. "tools" - software, applications, platforms, systems, technology, AI tools, productivity tools, design software, automation tools, dashboards, solutions, interfaces
-   Examples: "project management tool", "design software", "AI automation platform", "productivity app"
-
-2. "courses" - learning, training, education, courses, tutorials, workshops, certifications, skills, teaching, programs, curriculum, classes
-   Examples: "Python course", "data science training", "web development tutorial", "certification program"
-
-3. "service-providers" - vendors, providers, companies, agencies, consultants, businesses, professionals, experts, freelancers, firms, contractors
-   Examples: "web development company", "consulting firm", "graphic designer", "IT services", "marketing agency"
-
-4. "case-studies" - case studies, examples, success stories, implementations, experiences, best practices, projects, real-world examples
-   Examples: "success story", "implementation example", "case study", "real world example", "business case"
-
-5. "all" - very general queries, ambiguous queries, or queries that could apply to multiple categories
-   Examples: "help", "search", "what do you have", "show me options"
-
-User Query: "{query}"
-
-Important Rules:
-- Respond with ONLY the category name (exactly one of: tools, courses, service-providers, case-studies, all)
-- Focus on the main intent and key words in the query
-- If the query mentions software, applications, platforms, or technology solutions, classify as "tools"
-- If the query mentions companies, agencies, providers, or professional services, classify as "service-providers"
-- If the query is very general or unclear, classify as "all"
-
-Category:"""
-
-                completion = groq_client.chat.completions.create(
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    model="llama-3.1-8b-instant",
-                    temperature=0.1,
-                    max_tokens=10
-                )
-                
-                result = completion.choices[0].message.content.strip().lower()
-                
-                # Validate the result
-                valid_categories = ['tools', 'courses', 'service-providers', 'case-studies', 'all']
-                if result in valid_categories:
-                    return result
-                    
-            except Exception as e:
-                print(f"Error in GROQ intent detection: {e}")
-        
-        # Fallback to keyword-based detection
-        return self._fallback_intent_detection(query)
-    
-    def _fallback_intent_detection(self, query: str) -> str:
-        """Fallback keyword-based intent detection when GROQ is unavailable."""
-        query_lower = query.lower()
-        
-        # Case studies keywords
-        if any(word in query_lower for word in ['case study', 'case-study', 'example', 'success story', 'implementation']):
-            return 'case-studies'
-        
-        # Tools keywords
-        if any(word in query_lower for word in ['tool', 'software', 'app', 'platform', 'system', 'ai', 'automation']):
-            return 'tools'
-        
-        # Courses keywords
-        if any(word in query_lower for word in ['course', 'training', 'learn', 'education', 'tutorial', 'certification']):
-            return 'courses'
-        
-        # Service providers keywords
-        if any(word in query_lower for word in ['company', 'agency', 'provider', 'vendor', 'consultant', 'service']):
-            return 'service-providers'
-        
-        # Default to all for general queries
-        return 'all'
-    
-    def filter_by_category(self, results: list[dict], target_category: str) -> list[dict]:
-        if target_category == 'all':
-            return results
-        
-        filtered_results = []
-        for result in results:
-            sheet_name = result['metadata'].get('sheet', '').lower()
-            values = result['metadata'].get('values', [])
-            category_val = str(values[0]).lower() if values else ''
-            
-            # IMPORTANT: Check sheet-based categories FIRST to avoid misclassification
-            # Case studies should be identified by sheet name, not content keywords
-            is_case_study = ('case-studies' in sheet_name or 
-                           'case study' in sheet_name or
-                           sheet_name == 'case-studies')
-            
-            # Match based on actual sheet names from the data, prioritizing sheet-based identification
-            if target_category == 'case-studies' and is_case_study:
-                filtered_results.append(result)
-                
-            elif target_category == 'tools' and not is_case_study and (
-                'cleaned sheet' in sheet_name or 
-                'tool' in category_val or 
-                'ai tools' in category_val or
-                'software' in category_val.lower()):
-                filtered_results.append(result)
-                
-            elif target_category == 'courses' and not is_case_study and (
-                'training program' in sheet_name or 
-                'training' in sheet_name or 
-                'course' in category_val or
-                'education' in category_val):
-                filtered_results.append(result)
-                
-            elif target_category == 'service-providers' and not is_case_study and (
-                'service provider profiles' in sheet_name or 
-                'service' in sheet_name or 
-                'provider' in sheet_name or 
-                'provider' in category_val or 
-                'vendor' in category_val or
-                'company' in category_val):
-                filtered_results.append(result)
-        
-        # If filter is too strict and nothing is found, fall back to all results
-        if not filtered_results and target_category != 'all':
-            print(f"Warning: No results found for category '{target_category}', returning all results")
-            return results
-            
-        return filtered_results
 
     def search(self, query: str, k: int = 20, min_score: float = 0.30) -> tuple[list[dict], str]:
         # Always use 'all' categories - no intent detection
