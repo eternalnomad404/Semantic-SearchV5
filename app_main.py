@@ -240,34 +240,37 @@ Category:"""
             values = result['metadata'].get('values', [])
             category_val = str(values[0]).lower() if values else ''
             
-            # Match based on actual sheet names from the data
-            if target_category == 'tools' and (
+            # IMPORTANT: Check sheet-based categories FIRST to avoid misclassification
+            # Case studies should be identified by sheet name, not content keywords
+            is_case_study = ('case-studies' in sheet_name or 
+                           'case study' in sheet_name or
+                           sheet_name == 'case-studies')
+            
+            # Match based on actual sheet names from the data, prioritizing sheet-based identification
+            if target_category == 'case-studies' and is_case_study:
+                filtered_results.append(result)
+                
+            elif target_category == 'tools' and not is_case_study and (
                 'cleaned sheet' in sheet_name or 
                 'tool' in category_val or 
                 'ai tools' in category_val or
                 'software' in category_val.lower()):
                 filtered_results.append(result)
                 
-            elif target_category == 'courses' and (
+            elif target_category == 'courses' and not is_case_study and (
                 'training program' in sheet_name or 
                 'training' in sheet_name or 
                 'course' in category_val or
                 'education' in category_val):
                 filtered_results.append(result)
                 
-            elif target_category == 'service-providers' and (
+            elif target_category == 'service-providers' and not is_case_study and (
                 'service provider profiles' in sheet_name or 
                 'service' in sheet_name or 
                 'provider' in sheet_name or 
                 'provider' in category_val or 
                 'vendor' in category_val or
                 'company' in category_val):
-                filtered_results.append(result)
-                
-            elif target_category == 'case-studies' and (
-                'case-studies' in sheet_name or 
-                'case study' in sheet_name or
-                sheet_name == 'case-studies'):
                 filtered_results.append(result)
         
         # If filter is too strict and nothing is found, fall back to all results
@@ -364,9 +367,6 @@ Category:"""
         filtered_results = self.filter_by_category(results, detected_category)
         filtered_results.sort(key=lambda x: x['score'], reverse=True)
         
-        # Take the top k results first
-        top_results = filtered_results[:k]
-        
         # If showing all categories, reorganize by category groups while preserving scores
         if detected_category == 'all':
             # Define category order and identification
@@ -375,11 +375,17 @@ Category:"""
                 values = result['metadata'].get('values', [])
                 category_val = str(values[0]).lower() if values else ''
                 
-                # Determine category based on sheet name and content
-                if ('cleaned sheet' in sheet_name or 
-                    'tool' in category_val or 
-                    'ai tools' in category_val or
-                    'software' in category_val.lower()):
+                # IMPORTANT: Prioritize sheet-based identification to avoid misclassification
+                # Check case studies first since they can have misleading content keywords
+                if ('case-studies' in sheet_name or 
+                    'case study' in sheet_name or
+                    sheet_name == 'case-studies'):
+                    return 'case-studies'
+                # Then check other categories based on sheet name and content
+                elif ('cleaned sheet' in sheet_name or 
+                      'tool' in category_val or 
+                      'ai tools' in category_val or
+                      'software' in category_val.lower()):
                     return 'tools'
                 elif ('training program' in sheet_name or 
                       'training' in sheet_name or 
@@ -407,7 +413,7 @@ Category:"""
             case_studies_results = []
             other_results = []
             
-            for result in top_results:
+            for result in filtered_results:
                 category = get_result_category(result)
                 if category == 'tools':
                     tools_results.append(result)
@@ -447,6 +453,13 @@ Category:"""
             top_results = []
             for category_name, category_results, highest_score in category_groups:
                 top_results.extend(category_results)
+        else:
+            # For specific categories, just take top k results
+            top_results = filtered_results[:k]
+        
+        # Take the top k results after stacking (if all categories)
+        if detected_category == 'all':
+            top_results = top_results[:k]
         
         return top_results, detected_category
 
