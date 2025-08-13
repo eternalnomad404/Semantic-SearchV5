@@ -6,6 +6,7 @@ import json
 import numpy as np
 import streamlit as st
 import pickle
+import subprocess
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -14,6 +15,14 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+def get_git_commit_hash():
+    """Get current git commit hash"""
+    try:
+        commit_hash = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()
+        return commit_hash
+    except:
+        return "unknown"
 
 
 class SemanticSearcher:
@@ -445,8 +454,13 @@ def main() -> None:
         - **30% TF-IDF Keyword**: Exact keyword matching
         - **Smart Category Stacking**: Results organized by semantic relevance
         
-        All categories are searched and results are dynamically stacked based on semantic similarity scores.
+        All categories are searched (checking commit) and results are dynamically stacked based on semantic similarity scores.
         """)
+        
+        st.markdown("### Debug Info")
+        commit_hash = get_git_commit_hash()
+        st.code(f"Commit: {commit_hash}")
+        st.write(f"**Python Version:** {st.__version__}")
         
         st.markdown("### Search Tips")
         st.write("""
