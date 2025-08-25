@@ -391,7 +391,7 @@ def main() -> None:
                             problem_type = res['metadata'].get('problem_type', 'Unknown')
                             word_count = res['metadata'].get('word_count', 0)
                             
-                            with st.expander(f"{source_emoji} {category_type} #{i}: {display_header} (Score: {res['score']:.3f})"):
+                            with st.expander(f"{source_emoji} {category_type}: {display_header} (Score: {res['score']:.3f})"):
                                 col1, col2 = st.columns([2, 1])
                                 
                                 with col1:
@@ -408,7 +408,7 @@ def main() -> None:
                                     st.write(f"🔍 TF-IDF: {res['tfidf_score']:.3f} (30%)")
                         else:
                             # Display for tools, courses, and service providers
-                            with st.expander(f"{source_emoji} {category_type} #{i}: {display_header} (Score: {res['score']:.3f})"):
+                            with st.expander(f"{source_emoji} {category_type}: {display_header} (Score: {res['score']:.3f})"):
                                 detail_col, score_col = st.columns([2, 1])
                                 with detail_col:
                                     st.markdown("#### Details")
