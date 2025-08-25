@@ -353,8 +353,9 @@ def main() -> None:
                         # Generate URL for this result
                         result_url = searcher._generate_result_url(res)
                         
-                        # Determine title and emoji based on source
+                        # Determine category type and display info based on source
                         if "case-studies" in source_sheet.lower():
+                            category_type = "CASE STUDY"
                             source_emoji = "📋"
                             # For case studies, use the clean title as header
                             case_study_title = res['metadata'].get('values', ['Unknown'])[0]
@@ -362,16 +363,19 @@ def main() -> None:
                             clean_title = case_study_title.replace('- ', '').split('(')[0].strip()
                             display_header = clean_title
                         elif "tools" in source_sheet.lower() or "cleaned sheet" in source_sheet.lower():
+                            category_type = "TOOL"
                             source_emoji = "🛠️"
                             # For tools, use the tool name (index 2)
                             values = res['metadata'].get('values', [])
                             display_header = values[2] if len(values) >= 3 else header
                         elif "training" in source_sheet.lower():
+                            category_type = "COURSE"
                             source_emoji = "📚"
                             # For courses, use the course title (index 2)
                             values = res['metadata'].get('values', [])
                             display_header = values[2] if len(values) >= 3 else header
                         else:
+                            category_type = "SERVICE PROVIDER"
                             source_emoji = "🏢"
                             # For service providers, use the provider name (index 0)
                             values = res['metadata'].get('values', [])
@@ -380,16 +384,6 @@ def main() -> None:
                         # Create clickable title with hyperlink
                         clickable_title = f"[{display_header}]({result_url})"
                         
-                        # Determine emoji based on source
-                        if "case-studies" in source_sheet.lower():
-                            source_emoji = "�"
-                        elif "tools" in source_sheet.lower():
-                            source_emoji = "🛠️"
-                        elif "training" in source_sheet.lower():
-                            source_emoji = "📚"
-                        else:
-                            source_emoji = "🏢"
-                        
                         # Handle case studies display
                         if "case-studies" in source_sheet.lower():
                             case_study_title = res['metadata'].get('values', ['Unknown'])[0]
@@ -397,7 +391,7 @@ def main() -> None:
                             problem_type = res['metadata'].get('problem_type', 'Unknown')
                             word_count = res['metadata'].get('word_count', 0)
                             
-                            with st.expander(f"{source_emoji} Case Study {i}: {display_header} (Score: {res['score']:.3f})"):
+                            with st.expander(f"{source_emoji} {category_type} #{i}: {display_header} (Score: {res['score']:.3f})"):
                                 col1, col2 = st.columns([2, 1])
                                 
                                 with col1:
@@ -414,7 +408,7 @@ def main() -> None:
                                     st.write(f"🔍 TF-IDF: {res['tfidf_score']:.3f} (30%)")
                         else:
                             # Display for tools, courses, and service providers
-                            with st.expander(f"{source_emoji} Result {i}: {display_header} (Hybrid Score: {res['score']:.3f})"):
+                            with st.expander(f"{source_emoji} {category_type} #{i}: {display_header} (Score: {res['score']:.3f})"):
                                 detail_col, score_col = st.columns([2, 1])
                                 with detail_col:
                                     st.markdown("#### Details")
